@@ -1,13 +1,20 @@
 import argparse
+from functools import partial
 
+from matplotlib.lines import lineStyles
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import animation
+from matplotlib.artist import Artist
 from matplotlib.axes import Axes
 from matplotlib.image import AxesImage
-from time_independent import SOR, BaseGrid, GaussSeidel, Jacobi
+from matplotlib.patches import Rectangle
+from time_independent import SOR, BaseGrid, GaussSeidel, Jacobi, SOR_Insulating
 
 
-def concentration_curve(grid: BaseGrid, *, axis: Axes | None = None) -> None:
+def concentration_curve(
+    grid: BaseGrid, *, axis: Axes | None = None, column: int = 0
+) -> None:
     if axis is None:
         axis = plt.subplot()
 
@@ -22,7 +29,7 @@ def concentration_curve(grid: BaseGrid, *, axis: Axes | None = None) -> None:
             steps += 1
         axis.plot(
             np.linspace(1, 0, grid.grid_size),
-            grid.state[:, 0],
+            grid.state[:, column],
             label=f"{checkpoint}",
         )
     axis.legend()
@@ -117,12 +124,15 @@ def optimize_w(
 
 
 def assignment_j() -> None:
+    """Plot the optimal omega for differing grid_sizes between 10 and 150."""
     grid_sizes = np.arange(10, 150, 4, dtype=int)
     optima = [optimize_w(grid_size) for grid_size in grid_sizes]
     plt.plot(grid_sizes, optima)
     plt.grid()
     plt.xlabel("Grid size")
     plt.ylabel(r"$\omega$")
+    plt.xlim(5, 160)
+    plt.ylim(1.6, 2)
     plt.title(r"Optimal $\omega$ over grid size")
     plt.show()
 
@@ -143,11 +153,13 @@ def assignment_k() -> None:
     fig = plt.figure(figsize=(20, 3))
     axes = fig.subplots(ncols=5)
 
+    # Large sink heatmap
     grid = SOR(grid_size, 1.9)
     sink_large = (10, 5, 15, 35)
     grid.add_sink(*sink_large)
     steps_large = show_sinks(grid, axes[0], "Concentration large sink")
 
+    # Random sinks heatmap
     grid = SOR(grid_size, 1.9)
     seed = 43
     gen = np.random.Generator(np.random.PCG64(seed))
@@ -160,25 +172,32 @@ def assignment_k() -> None:
     steps_random = show_sinks(grid, axes[1], "Concentration random sinks")
     fig.colorbar(axes[0].get_images()[0], ax=axes)
 
+    # Different locations for sinks heatmap
+    ## Top
     grid = SOR(grid_size, 1.9)
     sink_top = (10, 5, 25, 25)
     grid.add_sink(*sink_top)
     steps_top = show_sinks(grid, axes[2], "Concentration top sink")
 
+    ## Middle
     grid = SOR(grid_size, 1.9)
     sink_middle = (25, 20, 25, 25)
     grid.add_sink(*sink_middle)
     steps_middle = show_sinks(grid, axes[3], "Concentration middle sink")
 
+    ## Bottom
     grid = SOR(grid_size, 1.9)
     sink_bottom = (45, 40, 25, 25)
     grid.add_sink(*sink_bottom)
     steps_bottom = show_sinks(grid, axes[4], "Concentration bottom sink")
 
     plt.show()
+
+    # Sink analysis
     fig = plt.figure()
     axes = fig.subplots(nrows=1, ncols=2)
 
+    # Bar plots showing required number of steps
     grid = SOR(grid_size, 1.9)
     steps_normal = run_till_condition(grid, 1e-10, 50000)
     sink_types = ["Normal", "Large", "Random", "Top", "Middle", "Bottom"]
@@ -195,9 +214,11 @@ def assignment_k() -> None:
     axes[0].set_title("Convergence speed by sink type")
     axes[0].grid(axis="y")
 
+    # Bar plots showing optimum omega
     sink_types = ["Normal", "Large", "Random", "Top", "Middle", "Bottom"]
+    normal_w = optimize_w(grid_size)
     steps_data = [
-        optimize_w(grid_size),
+        normal_w,
         optimize_w(grid_size, sinks=[sink_large]),
         optimize_w(grid_size, sinks=sinks_random),
         optimize_w(grid_size, sinks=[sink_top]),
@@ -205,15 +226,135 @@ def assignment_k() -> None:
         optimize_w(grid_size, sinks=[sink_bottom]),
     ]
     axes[1].set_ylim(1.5, 2)
+    axes[1].hlines(normal_w, -10, 10, color="red", linestyles="dashed")
     axes[1].bar(sink_types, steps_data)
     axes[1].set_ylabel("Steps to convergence")
     axes[1].set_title("Convergence speed by sink type")
+    yticks = [*axes[1].get_yticks(), normal_w]
+    yticklabels = [*axes[1].get_yticklabels(), f"{normal_w:.2f}"]
+    axes[1].set_yticks(yticks, labels=yticklabels)
     axes[1].grid(axis="y")
     plt.show()
 
 
+def optimize_w_insulating(
+    grid_size: int, *, insulators: list[tuple[int, int, int, int]] | None = None
+) -> float:
+    """Perform an objectively worse implementation of golden section search.
+
+    Unline the regular optimize_w, this one uses the SOR_Insulating class with the given
+    grid_size and insulator corner points.
+    """
+    lower = 1
+    upper = 2
+    max_error = 1e-3
+    epsilon = 1e-8
+    max_steps = 20000
+
+    if insulators is None:
+        insulators = []
+
+    while upper - lower > max_error:
+        left = 0.49 * (upper - lower) + lower
+        right = upper - left + lower
+
+        grid = SOR_Insulating(grid_size, left)
+        for sink in insulators:
+            grid.add_sink(*sink)
+        steps_left = run_till_condition(grid, epsilon, max_steps)
+
+        grid = SOR_Insulating(grid_size, right)
+        for sink in insulators:
+            grid.add_sink(*sink)
+        steps_right = run_till_condition(grid, epsilon, max_steps)
+
+        if steps_left > steps_right:
+            lower = left
+        else:
+            upper = right
+    return (upper + lower) / 2
+
+
 def assignment_l() -> None:
-    pass
+    grid_size = 50
+    fig = plt.figure()
+    axes = fig.subplots(ncols=2)
+
+    # Two split heatmap
+    grid = SOR_Insulating(grid_size, 1.9)
+    grid.add_sink(5, 5, 0, 19)
+    grid.add_sink(5, 5, 22, 28)
+    grid.add_sink(5, 5, 31, 49)
+    show_sinks(grid, axes[0], "Concentration two-slit")
+
+    # Highlighting which row is used for concentration
+    axes[0].add_patch(
+        Rectangle(
+            (19.5, -0.5), 1, 50, fill=False, edgecolor="crimson", lw=1, clip_on=False
+        )
+    )
+
+    # Random insulators heatmap
+    grid = SOR_Insulating(grid_size, 1.9)
+    seed = 43
+    gen = np.random.Generator(np.random.PCG64(seed))
+    sinks_random = []
+    for _ in range(100):
+        column, row = gen.integers(1, grid_size - 1, 2)
+        sink = (row, row, column, column)
+        sinks_random.append(sink)
+        grid.add_sink(*sink)
+    show_sinks(grid, axes[1], "Concentration random obstructions")
+
+    # Highlighting which row is used for concentration
+    axes[1].add_patch(
+        Rectangle(
+            (19.5, -0.5), 1, 50, fill=False, edgecolor="crimson", lw=1, clip_on=False
+        )
+    )
+    fig.colorbar(axes[0].get_images()[0], ax=axes)
+    plt.show()
+
+    fig = plt.figure()
+    axes = fig.subplots(ncols=2)
+
+    # Concentration curves
+    grid = SOR_Insulating(grid_size, 1.9)
+    grid.add_sink(5, 5, 0, 19)
+    grid.add_sink(5, 5, 22, 28)
+    grid.add_sink(5, 5, 31, 49)
+    axes[0].plot(np.linspace(0, 1, 2), np.linspace(0, 1, 2), "--", label="Target")
+    axes[0].set_title("Concentration curve two-slit")
+    concentration_curve(grid, axis=axes[0], column=20)
+
+    grid = SOR_Insulating(grid_size, 1.9)
+    for sink in sinks_random:
+        grid.add_sink(*sink)
+    axes[1].plot(np.linspace(0, 1, 2), np.linspace(0, 1, 2), "--", label="Target")
+    axes[1].set_title("Concentration curve random obstructions")
+    concentration_curve(grid, axis=axes[1], column=20)
+    plt.show()
+
+
+# Animated grid functions:
+def show_diffusion_step(frame: int, grid: BaseGrid, im: AxesImage) -> list[Artist]:
+    im.set_data(grid.state)
+    grid.step()
+    return [im]
+
+
+def show_diffusion(grid: BaseGrid) -> None:
+    fig = plt.figure()
+    axis = fig.subplots(nrows=1)
+    im = axis.imshow(grid.state)
+    _anim = animation.FuncAnimation(
+        fig,
+        partial(show_diffusion_step, grid=grid, im=im),
+        100,
+        interval=1000,
+        blit=True,
+    )
+    plt.show()
 
 
 def parse_args() -> argparse.Namespace:

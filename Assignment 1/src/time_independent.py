@@ -339,3 +339,110 @@ class SOR(BaseGrid):
 
                     state[row, column] = new
         return max_diff
+
+
+class SOR_Insulating(BaseGrid):
+    """Successive Over-Relaxation (SOR) method for solving steady-state diffusion.
+
+    Implements an accelerated iterative method with relaxation parameter omega.
+    In this class all sinks are instead treated as insulating material, no longer
+    giving or receiving heat.
+    """
+
+    def __init__(self, grid_size: int, omega: float) -> None:
+        """Initialize SOR solver with a grid and relaxation parameter.
+
+        Args:
+            grid_size: Dimension of the square grid. Must be > 2.
+            omega: Relaxation parameter. Values close to 1 are conservative,
+                values > 1 accelerate convergence (typically 1 < omega < 2).
+
+        Raises:
+            ValueError: If grid_size <= 2.
+
+        """
+        super().__init__(grid_size)
+        self._omega = omega
+
+    def step(self) -> float:
+        """Perform one SOR iteration.
+
+        Updates all interior grid points sequentially using relaxation,
+        blending between the Gauss-Seidel update and the current value.
+        Sink regions remain at zero.
+
+        Returns:
+            Maximum change in any grid point, used for convergence detection.
+
+        Note:
+            Uses periodic boundary conditions in the horizontal direction.
+
+        """
+        return self._step_cell(self._state, self._sinks, self._omega, self._grid_size)
+
+    @staticmethod
+    @njit
+    def _step_cell(
+        state: npt.NDArray,
+        sinks: npt.NDArray,
+        omega: float,
+        grid_size: int,
+    ) -> float:
+        """Compute one SOR iteration step on the grid (JIT-compiled).
+
+        Updates each non-sink interior point as a weighted combination of its
+        current value and the Gauss-Seidel update. Operates in-place on state.
+
+        Args:
+            state: Current concentration grid values.
+                Modified in-place with new iteration results.
+            sinks: Boolean mask of absorbing sink regions.
+            omega: Relaxation parameter for acceleration/deceleration.
+            grid_size: Dimension of the square grid.
+
+        Returns:
+            Maximum absolute change between old and new values across the grid.
+
+        Note:
+            - Uses periodic boundary conditions (horizontal wrapping).
+            - Skips updates for sink regions (value stays 0).
+            - Modifies state array in-place.
+
+        """
+        max_diff = 0.0
+        for row in range(1, grid_size - 1):
+            for column in range(grid_size):
+                if not sinks[row, column]:
+                    neighbours = 0
+                    if not sinks[row - 1, column]:
+                        neighbours += 1
+                        up = state[row - 1, column]
+                    else:
+                        up = 0
+                    if not sinks[row + 1, column]:
+                        neighbours += 1
+                        down = state[row + 1, column]
+                    else:
+                        down = 0
+                    if not sinks[row, column - 1]:
+                        neighbours += 1
+                        left = state[row, column - 1]
+                    else:
+                        left = 0
+                    if not sinks[row, (column + 1) % grid_size]:
+                        neighbours += 1
+                        right = state[row, (column + 1) % grid_size]
+                    else:
+                        right = 0
+                    current = state[row, column]
+
+                    new = (
+                        1 / neighbours * omega * (up + down + left + right)
+                        + (1 - omega) * current
+                    )
+
+                    diff = abs(current - new)
+                    max_diff = max(max_diff, diff)
+
+                    state[row, column] = new
+        return max_diff
