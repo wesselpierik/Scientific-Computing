@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import argparse
 
 
-
 def stability_condition(delta_t, delta_x, D):
     stability_check = (4 * delta_t * D) / (delta_x**2)
     if stability_check <= 1:
