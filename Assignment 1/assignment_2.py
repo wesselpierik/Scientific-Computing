@@ -115,11 +115,11 @@ def main():
     c_y1 = 1
 
     # interval lengths
-    N = 20
+    N = 50
     t0 = 0
-    tN = 10
+    tN = 1000
     delta_x = 1 / N
-    delta_t = 0.001
+    delta_t = 0.0001
 
     # parameters
     D = 1
