@@ -10,6 +10,11 @@ import matplotlib.pyplot as plt
 import argparse
 
 
+# array with x and y
+c = np.zeros((N, N))
+c[0,] = c_y1
+print(c)
+
 def stability_condition(delta_t, delta_x, D):
     stability_check = (4 * delta_t * D) / (delta_x**2)
     if stability_check <= 1:
