@@ -1,3 +1,5 @@
+import math
+from matplotlib.axes import Axes
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -31,12 +33,14 @@ def main():
         print(c)
 
 
+
+
 def stability_condition(delta_t, delta_x, D):
-    stability_check = (4 * delta_t * D) / (delta_x ** 2)
+    stability_check = (4 * delta_t * D) / (delta_x**2)
     if stability_check <= 1:
         print(f"The stability condition is satisfied, value is: {stability_check}")
         return True
-    
+
     print(f"The stability condition is not satisfied, value is: {stability_check}")
     return False
 
