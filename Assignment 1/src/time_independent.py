@@ -130,7 +130,7 @@ class Jacobi(BaseGrid):
 
         """
         self._result = self._state.copy()
-        max_diff = self._step_cell(
+        max_diff = self._step_cells(
             self._state, self._result, self._sinks, self._grid_size
         )
         self._state = self._result.copy()
@@ -138,7 +138,7 @@ class Jacobi(BaseGrid):
 
     @staticmethod
     @njit
-    def _step_cell(
+    def _step_cells(
         state: npt.NDArray, result: npt.NDArray, sinks: npt.NDArray, grid_size: int
     ) -> float:
         """Compute one Jacobi iteration step on the grid (JIT-compiled).
@@ -288,11 +288,11 @@ class SOR(BaseGrid):
             Uses periodic boundary conditions in the horizontal direction.
 
         """
-        return self._step_cell(self._state, self._sinks, self._omega, self._grid_size)
+        return self._step_cells(self._state, self._sinks, self._omega, self._grid_size)
 
     @staticmethod
     @njit
-    def _step_cell(
+    def _step_cells(
         state: npt.NDArray,
         sinks: npt.NDArray,
         omega: float,
@@ -378,11 +378,11 @@ class SOR_Insulating(BaseGrid):
             Uses periodic boundary conditions in the horizontal direction.
 
         """
-        return self._step_cell(self._state, self._sinks, self._omega, self._grid_size)
+        return self._step_cells(self._state, self._sinks, self._omega, self._grid_size)
 
     @staticmethod
     @njit
-    def _step_cell(
+    def _step_cells(
         state: npt.NDArray,
         sinks: npt.NDArray,
         omega: float,
