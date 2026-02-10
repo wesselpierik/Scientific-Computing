@@ -8,8 +8,14 @@ Description:
 TODO:
 """
 
+from functools import partial
+
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
+from matplotlib import animation
+from matplotlib.artist import Artist
+from matplotlib.image import AxesImage
 from numba import njit
 
 
@@ -53,7 +59,7 @@ class DLA:
     def add_candidates(self, row: int, column: int) -> None:
         for row_offset, column_offset in [(-1, 0), (0, -1), (1, 0), (0, 1)]:
             new_row = row + row_offset
-            new_column = column + column_offset % self._grid_size
+            new_column = (column + column_offset) % self._grid_size
 
             # Don't add candidate if it falls outside, is occupied, or already added
             if (
@@ -81,12 +87,16 @@ class DLA:
         probabilities = concentrations / total_concentration
 
         # Grow out new candidate
-        index = self._gen.choice(range(len(self._candidate_list)), 1, p=probabilities)
+        index = self._gen.choice(range(len(self._candidate_list)), 1, p=probabilities)[
+            0
+        ]
         row, column = self._candidate_list[index]
         self._candidate_array[row, column] = False
         self._growths[row, column] = True
+        self._nutrients[row, column] = 0
         self._candidate_list[index] = self._candidate_list[-1]
         self._candidate_list.pop()
+        self.add_candidates(row, column)
 
     def step(self) -> None:
         self.stabilize_nutrients()
@@ -131,19 +141,25 @@ class DLA:
         """
         max_diff = 0.0
         grid_size = nutrients.shape[0]
-        for row in range(1, grid_size - 1):
+        for row in range(1, grid_size):
             for column in range(grid_size):
                 if not growths[row, column]:
                     up = nutrients[row - 1, column]
-                    down = nutrients[row + 1, column]
                     left = nutrients[row, column - 1]
                     right = nutrients[row, (column + 1) % grid_size]
                     current = nutrients[row, column]
 
-                    new = (
-                        0.25 * omega * (up + down + left + right)
-                        + (1 - omega) * current
-                    )
+                    if row < grid_size - 1:
+                        down = nutrients[row + 1, column]
+
+                        new = (
+                            0.25 * omega * (up + down + left + right)
+                            + (1 - omega) * current
+                        )
+                    else:
+                        new = (
+                            1 / 3 * omega * (up + left + right) + (1 - omega) * current
+                        )
 
                     diff = abs(current - new)
                     max_diff = max(max_diff, diff)
@@ -169,7 +185,7 @@ class DLA:
             2D numpy array with the candidates as True and the other cells as False.
 
         """
-        return self._candidates
+        return self._candidate_array
 
     @property
     def growths(self) -> npt.NDArray:
@@ -185,3 +201,50 @@ class DLA:
     def grid_size(self) -> int:
         """Get the size of the square grid."""
         return self._grid_size
+
+
+# Animated grid functions:
+def show_growth_step(
+    _frame: int,
+    dla: DLA,
+    nutrients_im: AxesImage,
+    growths_im: AxesImage,
+    candidates_im: AxesImage,
+) -> list[Artist]:
+    dla.step()
+    nutrients_im.set_data(dla.nutrients)
+    growths_im.set_data(dla.growths)
+    candidates_im.set_data(dla.candidates)
+    return [nutrients_im, growths_im, candidates_im]
+
+
+def show_growth(dla: DLA) -> None:
+    fig = plt.figure()
+    axis = fig.subplots(ncols=3)
+    nutrients_im = axis[0].imshow(dla.nutrients)
+    growths_im = axis[1].imshow(dla.growths)
+    candidates_im = axis[2].imshow(dla.candidates)
+
+    _anim = animation.FuncAnimation(
+        fig,
+        partial(
+            show_growth_step,
+            dla=dla,
+            nutrients_im=nutrients_im,
+            growths_im=growths_im,
+            candidates_im=candidates_im,
+        ),
+        100,
+        interval=1,
+        blit=True,
+    )
+    plt.show()
+
+
+def main() -> None:
+    dla = DLA(50, 1)
+    show_growth(dla)
+
+
+if __name__ == "__main__":
+    main()
