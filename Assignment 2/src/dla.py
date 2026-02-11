@@ -9,19 +9,21 @@ TODO:
 """
 
 import multiprocessing as mp
-from ctypes import Array, c_double
-from functools import partial
-from multiprocessing.sharedctypes import Synchronized
 import time
+from ctypes import Array
+from functools import partial
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
-from numba.core.types import c_float64
 import numpy as np
 import numpy.typing as npt
 from matplotlib import animation
 from matplotlib.artist import Artist
 from matplotlib.image import AxesImage
 from numba import njit
+
+if TYPE_CHECKING:
+    from multiprocessing.sharedctypes import Synchronized
 
 
 @njit
@@ -107,46 +109,59 @@ class NutrientWorker:
         self._omega = omega
         self._epsilon: Synchronized = mp.Value("d", 0.0)
 
+    def _sync(self) -> None:
+        if self._right_worker is None or self._left_worker is None:
+            error = "Not all workers are connected"
+            raise ValueError(error)
+
+        self._right_worker.send(None)  # pyright: ignore[reportAttributeAccessIssue]
+        self._left_worker.send(None)  # pyright: ignore[reportAttributeAccessIssue]
+        self._right_worker.recv()  # pyright: ignore[reportAttributeAccessIssue]
+        self._left_worker.recv()  # pyright: ignore[reportAttributeAccessIssue]
+
+    def _run_top_half(self, nutrients: npt.NDArray) -> float:
+        return _step_nutrients(
+            nutrients,
+            self._growths,
+            self._omega,
+            first_row=1,
+            last_row=int(self._grid_size / 2),
+            first_column=self._begin_column,
+            last_column=self._end_column,
+        )
+
+    def _run_bottom_half(self, nutrients: npt.NDArray) -> float:
+        return _step_nutrients(
+            nutrients,
+            self._growths,
+            self._omega,
+            first_row=int(self._grid_size / 2) + 1,
+            last_row=-1,
+            first_column=self._begin_column,
+            last_column=self._end_column,
+        )
+
     def run(self, steps: int) -> None:
         nutrients = np.frombuffer(
             self._nutrients_shared,
             dtype=np.float64,
         ).reshape((self._grid_size, self._grid_size))
 
-        if self._right_worker is None or self._left_worker is None:
-            error = "Not all workers are connected"
-            raise ValueError(error)
-
-        now = time.time()
-
         for _ in range(steps):
-            self._epsilon.value = _step_nutrients(
-                nutrients,
-                self._growths,
-                self._omega,
-                first_row=1,
-                last_row=int(self._grid_size / 2),
-                first_column=self._begin_column,
-                last_column=self._end_column,
-            )
+            if self._id % 2 == 0:
+                self._epsilon.value = self._run_top_half(nutrients)
 
-            self._right_worker.send(None)  # pyright: ignore[reportAttributeAccessIssue]
-            self._left_worker.send(None)  # pyright: ignore[reportAttributeAccessIssue]
-            self._right_worker.recv()  # pyright: ignore[reportAttributeAccessIssue]
-            self._left_worker.recv()  # pyright: ignore[reportAttributeAccessIssue]
+                self._sync()
 
-            self._epsilon.value = max(
-                self._epsilon.value,
-                _step_nutrients(
-                    nutrients,
-                    self._growths,
-                    self._omega,
-                    first_row=int(self._grid_size / 2) + 1,
-                    last_row=-1,
-                    first_column=self._begin_column,
-                    last_column=self._end_column,
-                ),
-            )
+                self._epsilon.value = max(
+                    self._epsilon.value, self._run_bottom_half(nutrients)
+                )
+            else:
+                self._epsilon.value = self._run_bottom_half(nutrients)
+                self._sync()
+                self._epsilon.value = max(
+                    self._epsilon.value, self._run_top_half(nutrients)
+                )
 
     def set_right_worker(self, pipe: object) -> None:
         self._right_worker = pipe
@@ -223,11 +238,14 @@ class DLA:
     def stabilize_nutrients(self) -> None:
         epsilon = 1e-10
         steps = 0
-        while self.step_nutrients() > epsilon:
+        current_epsilon = self.step_nutrients()
+        while current_epsilon > epsilon:
+            current_epsilon = self.step_nutrients()
+            print(current_epsilon)
             steps += 1
 
     def stabilize_nutrients_mp(self) -> None:
-        nutrients_shared = mp.RawArray(c_double, self._grid_size * self._grid_size)
+        nutrients_shared = mp.RawArray("d", self._grid_size * self._grid_size)
         # X as a Numpy array
         nutrients_repr = np.frombuffer(
             nutrients_shared,
@@ -239,6 +257,7 @@ class DLA:
         width = np.ceil(self._grid_size / self._workers)
         worker_objects = [
             NutrientWorker(
+                i,
                 nutrients_shared,
                 grid_size=self._grid_size,
                 begin_column=int(i * width),
@@ -256,11 +275,12 @@ class DLA:
         current_epsilon = 2e-10
         while current_epsilon > epsilon:
             worker_threads = [
-                mp.Process(target=worker.run, args=(5000,)) for worker in worker_objects
+                mp.Process(target=worker.run, args=(1000,)) for worker in worker_objects
             ]
             [worker.start() for worker in worker_threads]
             [worker.join() for worker in worker_threads]
             current_epsilon = np.max([worker.epsilon for worker in worker_objects])
+            print(current_epsilon)
         np.copyto(self._nutrients, nutrients_repr)
 
     def grow_candidate(self) -> None:
@@ -387,8 +407,8 @@ def show_growth(dla: DLA) -> None:
 
 
 def main() -> None:
-    grid_size = 100
-    dla = DLA(grid_size, 1, omega=1.8, workers=1)
+    grid_size = 1000
+    dla = DLA(grid_size, 1, omega=1.8, workers=16)
     show_growth(dla)
 
 
