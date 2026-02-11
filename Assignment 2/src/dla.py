@@ -33,6 +33,7 @@ class DLA:
         self._candidate_list = []
         self._candidate_array = np.zeros((grid_size, grid_size), dtype=np.bool)
         self._nutrients = np.zeros((grid_size, grid_size))
+        self._nutrients = np.zeros((grid_size, grid_size), dtype=np.float64)
 
         self._grid_size = grid_size
         self._omega = omega
@@ -79,8 +80,11 @@ class DLA:
 
     def grow_candidate(self) -> None:
         # Calculate probabilites for each candidate dependent on nutrient concentration
-        concentrations = np.array(
-            [self._nutrients[row, column] for row, column in self._candidate_list]
+        ## Absolute value, as smallest concentrations may be just below 0
+        concentrations = np.abs(
+            np.array(
+                [self._nutrients[row, column] for row, column in self._candidate_list]
+            ),
         )
         concentrations = np.pow(concentrations, self._eta)
         total_concentration = np.sum(concentrations)
@@ -243,6 +247,8 @@ def show_growth(dla: DLA) -> None:
 
 def main() -> None:
     dla = DLA(50, 1)
+    grid_size = 100
+    dla = DLA(grid_size, 1, omega=1.8, workers=1)
     show_growth(dla)
 
 
