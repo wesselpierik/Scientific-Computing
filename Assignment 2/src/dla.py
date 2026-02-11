@@ -8,9 +8,14 @@ Description:
 TODO:
 """
 
+import multiprocessing as mp
+from ctypes import Array, c_double
 from functools import partial
+from multiprocessing.sharedctypes import Synchronized
+import time
 
 import matplotlib.pyplot as plt
+from numba.core.types import c_float64
 import numpy as np
 import numpy.typing as npt
 from matplotlib import animation
@@ -19,9 +24,150 @@ from matplotlib.image import AxesImage
 from numba import njit
 
 
+@njit
+def _step_nutrients(
+    nutrients: npt.NDArray,
+    growths: npt.NDArray,
+    omega: float,
+    first_row: int = 1,
+    last_row: int = -1,
+    first_column: int = 0,
+    last_column: int = -1,
+) -> float:
+    """Compute one SOR iteration step on the grid (JIT-compiled).
+
+    Updates each non-growth interior point as a weighted combination of its
+    current value and the Gauss-Seidel update. Operates in-place on state.
+
+    Args:
+        nutrients: Current nutrient concentration grid values.
+            Modified in-place with new iteration results.
+        growths: Boolean mask of absorbing sink regions.
+        omega: Relaxation parameter for acceleration/deceleration.
+
+    Returns:
+        Maximum absolute change between old and new values across the grid.
+
+    Note:
+        - Uses periodic boundary conditions (horizontal wrapping).
+        - Skips updates for sink regions (value stays 0).
+        - Modifies state array in-place.
+
+    """
+    max_diff = 0.0
+    grid_size = nutrients.shape[0]
+    last_column = grid_size - 1 if last_column == -1 else last_column
+    last_row = grid_size - 1 if last_row == -1 else last_row
+    for row in range(first_row, last_row + 1):
+        for column in range(first_column, last_column + 1):
+            if growths[row, column]:
+                continue
+
+            up = nutrients[row - 1, column]
+            left = nutrients[row, column - 1]
+            right = nutrients[row, (column + 1) % grid_size]
+            current = nutrients[row, column]
+
+            if row < grid_size - 1:
+                down = nutrients[row + 1, column]
+
+                new = 0.25 * omega * (up + down + left + right) + (1 - omega) * current
+            else:
+                new = 1 / 3 * omega * (up + left + right) + (1 - omega) * current
+
+            diff = abs(current - new)
+            max_diff = max(max_diff, diff)
+
+            nutrients[row, column] = new
+    return max_diff
+
+
+class NutrientWorker:
+    def __init__(
+        self,
+        id: int,
+        nutrients: Array,
+        grid_size: int,
+        begin_column: int,
+        end_column: int,
+        growths: npt.NDArray,
+        omega: float,
+    ) -> None:
+        self._id = id
+
+        self._nutrients_shared = nutrients
+        self._growths = growths
+        self._right_worker = None
+        self._left_worker = None
+
+        self._grid_size = grid_size
+        self._begin_column = begin_column
+        self._end_column = end_column
+
+        self._omega = omega
+        self._epsilon: Synchronized = mp.Value("d", 0.0)
+
+    def run(self, steps: int) -> None:
+        nutrients = np.frombuffer(
+            self._nutrients_shared,
+            dtype=np.float64,
+        ).reshape((self._grid_size, self._grid_size))
+
+        if self._right_worker is None or self._left_worker is None:
+            error = "Not all workers are connected"
+            raise ValueError(error)
+
+        now = time.time()
+
+        for _ in range(steps):
+            self._epsilon.value = _step_nutrients(
+                nutrients,
+                self._growths,
+                self._omega,
+                first_row=1,
+                last_row=int(self._grid_size / 2),
+                first_column=self._begin_column,
+                last_column=self._end_column,
+            )
+
+            self._right_worker.send(None)  # pyright: ignore[reportAttributeAccessIssue]
+            self._left_worker.send(None)  # pyright: ignore[reportAttributeAccessIssue]
+            self._right_worker.recv()  # pyright: ignore[reportAttributeAccessIssue]
+            self._left_worker.recv()  # pyright: ignore[reportAttributeAccessIssue]
+
+            self._epsilon.value = max(
+                self._epsilon.value,
+                _step_nutrients(
+                    nutrients,
+                    self._growths,
+                    self._omega,
+                    first_row=int(self._grid_size / 2) + 1,
+                    last_row=-1,
+                    first_column=self._begin_column,
+                    last_column=self._end_column,
+                ),
+            )
+
+    def set_right_worker(self, pipe: object) -> None:
+        self._right_worker = pipe
+
+    def set_left_worker(self, pipe: object) -> None:
+        self._left_worker = pipe
+
+    @property
+    def epsilon(self) -> float:
+        return self._epsilon.value
+
+
 class DLA:
     def __init__(
-        self, grid_size: int, eta: float, *, omega: float = 1, seed: int = 43
+        self,
+        grid_size: int,
+        eta: float,
+        *,
+        workers: int = 1,
+        omega: float = 1,
+        seed: int = 43,
     ) -> None:
         if grid_size <= 2:  # noqa: PLR2004
             size_error = "Grid size is too small for any meaningful calculation."
@@ -32,12 +178,13 @@ class DLA:
         self._growths = np.zeros((grid_size, grid_size), dtype=np.bool)
         self._candidate_list = []
         self._candidate_array = np.zeros((grid_size, grid_size), dtype=np.bool)
-        self._nutrients = np.zeros((grid_size, grid_size))
         self._nutrients = np.zeros((grid_size, grid_size), dtype=np.float64)
 
         self._grid_size = grid_size
         self._omega = omega
         self._eta = eta
+
+        self._workers = workers
 
         self.reset_grid()
 
@@ -74,9 +221,47 @@ class DLA:
             self._candidate_array[new_row, new_column] = True
 
     def stabilize_nutrients(self) -> None:
-        epsilon = 1e-12
+        epsilon = 1e-10
+        steps = 0
         while self.step_nutrients() > epsilon:
-            pass
+            steps += 1
+
+    def stabilize_nutrients_mp(self) -> None:
+        nutrients_shared = mp.RawArray(c_double, self._grid_size * self._grid_size)
+        # X as a Numpy array
+        nutrients_repr = np.frombuffer(
+            nutrients_shared,
+            dtype=np.float64,
+        ).reshape((self._grid_size, self._grid_size))
+
+        # copy data to the shared array
+        np.copyto(nutrients_repr, self._nutrients)
+        width = np.ceil(self._grid_size / self._workers)
+        worker_objects = [
+            NutrientWorker(
+                nutrients_shared,
+                grid_size=self._grid_size,
+                begin_column=int(i * width),
+                end_column=min((i + 1) * width - 1, self._grid_size - 1),
+                growths=self._growths,
+                omega=self._omega,
+            )
+            for i in range(self._workers)
+        ]
+        for i in range(self._workers):
+            left_pipe, right_pipe = mp.Pipe(duplex=True)
+            worker_objects[i].set_left_worker(right_pipe)
+            worker_objects[i - 1].set_right_worker(left_pipe)
+        epsilon = 1e-10
+        current_epsilon = 2e-10
+        while current_epsilon > epsilon:
+            worker_threads = [
+                mp.Process(target=worker.run, args=(5000,)) for worker in worker_objects
+            ]
+            [worker.start() for worker in worker_threads]
+            [worker.join() for worker in worker_threads]
+            current_epsilon = np.max([worker.epsilon for worker in worker_objects])
+        np.copyto(self._nutrients, nutrients_repr)
 
     def grow_candidate(self) -> None:
         # Calculate probabilites for each candidate dependent on nutrient concentration
@@ -103,7 +288,10 @@ class DLA:
         self.add_candidates(row, column)
 
     def step(self) -> None:
-        self.stabilize_nutrients()
+        if self._workers <= 1:
+            self.stabilize_nutrients()
+        else:
+            self.stabilize_nutrients_mp()
         self.grow_candidate()
 
     def step_nutrients(self) -> float:
@@ -114,62 +302,15 @@ class DLA:
             used for convergence detection.
 
         """
-        return self._step_nutrients(self._nutrients, self._growths, self._omega)
-
-    @staticmethod
-    @njit
-    def _step_nutrients(
-        nutrients: npt.NDArray,
-        growths: npt.NDArray,
-        omega: float,
-    ) -> float:
-        """Compute one SOR iteration step on the grid (JIT-compiled).
-
-        Updates each non-growth interior point as a weighted combination of its
-        current value and the Gauss-Seidel update. Operates in-place on state.
-
-        Args:
-            nutrients: Current nutrient concentration grid values.
-                Modified in-place with new iteration results.
-            growths: Boolean mask of absorbing sink regions.
-            omega: Relaxation parameter for acceleration/deceleration.
-
-        Returns:
-            Maximum absolute change between old and new values across the grid.
-
-        Note:
-            - Uses periodic boundary conditions (horizontal wrapping).
-            - Skips updates for sink regions (value stays 0).
-            - Modifies state array in-place.
-
-        """
-        max_diff = 0.0
-        grid_size = nutrients.shape[0]
-        for row in range(1, grid_size):
-            for column in range(grid_size):
-                if not growths[row, column]:
-                    up = nutrients[row - 1, column]
-                    left = nutrients[row, column - 1]
-                    right = nutrients[row, (column + 1) % grid_size]
-                    current = nutrients[row, column]
-
-                    if row < grid_size - 1:
-                        down = nutrients[row + 1, column]
-
-                        new = (
-                            0.25 * omega * (up + down + left + right)
-                            + (1 - omega) * current
-                        )
-                    else:
-                        new = (
-                            1 / 3 * omega * (up + left + right) + (1 - omega) * current
-                        )
-
-                    diff = abs(current - new)
-                    max_diff = max(max_diff, diff)
-
-                    nutrients[row, column] = new
-        return max_diff
+        return _step_nutrients(
+            self._nutrients,
+            self._growths,
+            self._omega,
+            first_row=1,
+            last_row=self._grid_size - 1,
+            first_column=0,
+            last_column=self._grid_size - 1,
+        )
 
     @property
     def nutrients(self) -> npt.NDArray:
@@ -246,7 +387,6 @@ def show_growth(dla: DLA) -> None:
 
 
 def main() -> None:
-    dla = DLA(50, 1)
     grid_size = 100
     dla = DLA(grid_size, 1, omega=1.8, workers=1)
     show_growth(dla)
