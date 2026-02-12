@@ -9,8 +9,17 @@ import numpy.typing as npt
 import matplotlib.pyplot as plt
 import argparse
 
-
 def stability_condition(delta_t, delta_x, D):
+    """Function to check whether the stability condition is satisfied for the specified time and space step sizes.
+
+    Args:
+        delta_t (float): time step size
+        delta_x (float): space step size (x and y directions have the same step size)
+        D (float): diffusion coefficient
+
+    Returns:
+        bool: True if the stability condition is satisfied, False otherwise
+    """    
     stability_check = (4 * delta_t * D) / (delta_x**2)
     if stability_check <= 1:
         print(f"The stability condition is satisfied, value is: {stability_check}")
@@ -21,6 +30,17 @@ def stability_condition(delta_t, delta_x, D):
 
 
 def concentration_timestep(c, delta_x, delta_t, D):
+    """Function that updates the spatial grid for a single step size.
+
+    Args:
+        c (npt.NDArray): array containing the concentration values (on x and y grid) at the current time step
+        delta_x (float): space step size (x and y directions have the same step size)
+        delta_t (float): time step size
+        D (float): diffusion coefficient
+
+    Returns:
+        npt.NDArray: updated array containing the concentration values after one time step
+    """    
     N = c.shape[0]
     for x in range(N):
         for y in range(1, N - 1):
@@ -44,6 +64,14 @@ def concentration_timestep(c, delta_x, delta_t, D):
 
 
 def plot_analytic(t: float, D: float, N: int, *, axes: Axes | None = None):
+    """Function to plot the analytical solution of the diffusion equation for a given time t, diffusion coefficient D and number of grid points N.
+
+    Args:
+        t (float): time
+        D (float): diffusion coefficient
+        N (int): number of grid points
+        axes (Axes | None, optional): matplotlib axes object. Defaults to None.
+    """    
     if axes is None:
         fig = plt.figure()
         axes = fig.subplots(nrows=1, ncols=1)
@@ -72,6 +100,19 @@ def show_diffusion_step(
     delta_t: float,
     D: float,
 ) -> list[Artist]:
+    """Function to update the grid for a single time step and update the image for the animation.
+
+    Args:
+        frame (int): current frame number
+        grid (list[npt.NDArray]): list containing the concentration grid
+        im (AxesImage): matplotlib image object
+        delta_x (float): space step size
+        delta_t (float): time step size
+        D (float): diffusion coefficient
+
+    Returns:
+        list[Artist]: list containing the updated image artist
+    """   
     grid[0] = concentration_timestep(
         grid[0],
         delta_x,
@@ -83,6 +124,14 @@ def show_diffusion_step(
 
 
 def show_diffusion(c: npt.NDArray, delta_x: float, delta_t: float, D: float) -> None:
+    """Function to show the diffusion process as an animation.
+
+    Args:
+        c (npt.NDArray): initial concentration grid
+        delta_x (float): space step size
+        delta_t (float): time step size
+        D (float): diffusion coefficient
+    """    
     fig = plt.figure()
     axis = fig.subplots(nrows=1)
     im = axis.imshow(c)
@@ -99,6 +148,11 @@ def show_diffusion(c: npt.NDArray, delta_x: float, delta_t: float, D: float) -> 
 
 
 def parse_args() -> argparse.Namespace:
+    """Function to parse the command line arguments.
+
+    Returns:
+        argparse.Namespace: namespace containing the parsed arguments
+    """    
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "option", help="Determine the code to run", choices=["animated"]
@@ -136,7 +190,6 @@ def main():
         for t in np.arange(t0, tN, delta_t):
             c = concentration_timestep(c, delta_x, delta_t, D)
             print(c)
-
 
 if __name__ == "__main__":
     main()
