@@ -9,9 +9,8 @@ TODO:
 """
 
 import multiprocessing as mp
-import time
-from ctypes import Array
 from functools import partial
+from multiprocessing.sharedctypes import SynchronizedArray
 from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
@@ -88,7 +87,7 @@ class NutrientWorker:
     def __init__(
         self,
         id: int,
-        nutrients: Array,
+        nutrients: SynchronizedArray,
         grid_size: int,
         begin_column: int,
         end_column: int,
@@ -143,7 +142,7 @@ class NutrientWorker:
 
     def run(self, steps: int) -> None:
         nutrients = np.frombuffer(
-            self._nutrients_shared,
+            self._nutrients_shared.get_obj(),
             dtype=np.float64,
         ).reshape((self._grid_size, self._grid_size))
 
@@ -162,6 +161,7 @@ class NutrientWorker:
                 self._epsilon.value = max(
                     self._epsilon.value, self._run_top_half(nutrients)
                 )
+            self._sync()
 
     def set_right_worker(self, pipe: object) -> None:
         self._right_worker = pipe
@@ -181,6 +181,8 @@ class DLA:
         eta: float,
         *,
         workers: int = 1,
+        worker_step_size: int = 1000,
+        epsilon: float = 1e-10,
         omega: float = 1,
         seed: int = 43,
     ) -> None:
@@ -196,10 +198,12 @@ class DLA:
         self._nutrients = np.zeros((grid_size, grid_size), dtype=np.float64)
 
         self._grid_size = grid_size
+        self._epsilon = epsilon
         self._omega = omega
         self._eta = eta
 
         self._workers = workers
+        self._worker_step_size = worker_step_size
 
         self.reset_grid()
 
@@ -236,19 +240,14 @@ class DLA:
             self._candidate_array[new_row, new_column] = True
 
     def stabilize_nutrients(self) -> None:
-        epsilon = 1e-10
-        steps = 0
-        current_epsilon = self.step_nutrients()
-        while current_epsilon > epsilon:
-            current_epsilon = self.step_nutrients()
-            print(current_epsilon)
-            steps += 1
+        while self.step_nutrients() > self._epsilon:
+            pass
 
     def stabilize_nutrients_mp(self) -> None:
-        nutrients_shared = mp.RawArray("d", self._grid_size * self._grid_size)
+        nutrients_shared = mp.Array("d", self._grid_size * self._grid_size)
         # X as a Numpy array
         nutrients_repr = np.frombuffer(
-            nutrients_shared,
+            nutrients_shared.get_obj(),
             dtype=np.float64,
         ).reshape((self._grid_size, self._grid_size))
 
@@ -271,11 +270,11 @@ class DLA:
             left_pipe, right_pipe = mp.Pipe(duplex=True)
             worker_objects[i].set_left_worker(right_pipe)
             worker_objects[i - 1].set_right_worker(left_pipe)
-        epsilon = 1e-10
-        current_epsilon = 2e-10
-        while current_epsilon > epsilon:
+        current_epsilon = self._epsilon + 1
+        while current_epsilon > self._epsilon:
             worker_threads = [
-                mp.Process(target=worker.run, args=(1000,)) for worker in worker_objects
+                mp.Process(target=worker.run, args=(self._worker_step_size,))
+                for worker in worker_objects
             ]
             [worker.start() for worker in worker_threads]
             [worker.join() for worker in worker_threads]
@@ -408,7 +407,7 @@ def show_growth(dla: DLA) -> None:
 
 def main() -> None:
     grid_size = 1000
-    dla = DLA(grid_size, 1, omega=1.8, workers=16)
+    dla = DLA(grid_size, 1, omega=1.8, workers=32)
     show_growth(dla)
 
 
