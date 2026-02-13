@@ -8,6 +8,7 @@ dependencies = [
     "matplotlib>=3.10.8",
     "numba>0.63.0",
     "numpy<2.4",
+    "tqdm>=4.67.3",
 ]
 
 [tool.ruff.lint]

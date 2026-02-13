@@ -11,7 +11,6 @@ TODO:
 import multiprocessing as mp
 from functools import partial
 from multiprocessing.sharedctypes import SynchronizedArray
-from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,13 +18,10 @@ import numpy.typing as npt
 from matplotlib import animation
 from matplotlib.artist import Artist
 from matplotlib.image import AxesImage
-from numba import njit
-
-if TYPE_CHECKING:
-    from multiprocessing.sharedctypes import Synchronized
+from numba import njit, prange
 
 
-@njit
+@njit(cache=True, parallel=True)
 def _step_nutrients(
     nutrients: npt.NDArray,
     growths: npt.NDArray,
@@ -59,8 +55,8 @@ def _step_nutrients(
     grid_size = nutrients.shape[0]
     last_column = grid_size - 1 if last_column == -1 else last_column
     last_row = grid_size - 1 if last_row == -1 else last_row
-    for row in range(first_row, last_row + 1):
-        for column in range(first_column, last_column + 1):
+    for row in prange(first_row, last_row):
+        for column in prange(first_column, last_column + 1):
             if growths[row, column]:
                 continue
 
@@ -69,17 +65,30 @@ def _step_nutrients(
             right = nutrients[row, (column + 1) % grid_size]
             current = nutrients[row, column]
 
-            if row < grid_size - 1:
-                down = nutrients[row + 1, column]
+            down = nutrients[row + 1, column]
 
-                new = 0.25 * omega * (up + down + left + right) + (1 - omega) * current
-            else:
-                new = 1 / 3 * omega * (up + left + right) + (1 - omega) * current
+            new = 0.25 * omega * (up + down + left + right) + (1 - omega) * current
 
             diff = abs(current - new)
             max_diff = max(max_diff, diff)
 
             nutrients[row, column] = new
+
+    for column in prange(first_column, last_column + 1):
+        if growths[last_row, column]:
+            continue
+
+        up = nutrients[last_row, column]
+        left = nutrients[last_row, column - 1]
+        right = nutrients[last_row, (column + 1) % grid_size]
+        current = nutrients[last_row, column]
+
+        new = 1 / 3 * omega * (up + left + right) + (1 - omega) * current
+
+        diff = abs(current - new)
+        max_diff = max(max_diff, diff)
+
+        nutrients[last_row, column] = new
     return max_diff
 
 
@@ -98,25 +107,23 @@ class NutrientWorker:
 
         self._nutrients_shared = nutrients
         self._growths = growths
-        self._right_worker = None
-        self._left_worker = None
+        self._parent = None
 
         self._grid_size = grid_size
         self._begin_column = begin_column
         self._end_column = end_column
 
         self._omega = omega
-        self._epsilon: Synchronized = mp.Value("d", 0.0)
+        self._epsilon1 = 0.0
+        self._epsilon2 = 0.0
 
-    def _sync(self) -> None:
-        if self._right_worker is None or self._left_worker is None:
+    def _sync(self) -> bool:
+        if self._parent is None:
             error = "Not all workers are connected"
             raise ValueError(error)
 
-        self._right_worker.send(None)  # pyright: ignore[reportAttributeAccessIssue]
-        self._left_worker.send(None)  # pyright: ignore[reportAttributeAccessIssue]
-        self._right_worker.recv()  # pyright: ignore[reportAttributeAccessIssue]
-        self._left_worker.recv()  # pyright: ignore[reportAttributeAccessIssue]
+        self._parent.send(max(self._epsilon1, self._epsilon2))  # pyright: ignore[reportAttributeAccessIssue]
+        return self._parent.recv()  # pyright: ignore[reportAttributeAccessIssue]
 
     def _run_top_half(self, nutrients: npt.NDArray) -> float:
         return _step_nutrients(
@@ -140,38 +147,33 @@ class NutrientWorker:
             last_column=self._end_column,
         )
 
-    def run(self, steps: int) -> None:
+    def run(self) -> None:
         nutrients = np.frombuffer(
             self._nutrients_shared.get_obj(),
             dtype=np.float64,
         ).reshape((self._grid_size, self._grid_size))
 
-        for _ in range(steps):
+        while True:
             if self._id % 2 == 0:
-                self._epsilon.value = self._run_top_half(nutrients)
+                self._epsilon1 = self._run_top_half(nutrients)
 
-                self._sync()
+                if self._sync():
+                    return
 
-                self._epsilon.value = max(
-                    self._epsilon.value, self._run_bottom_half(nutrients)
-                )
+                self._epsilon2 = self._run_bottom_half(nutrients)
             else:
-                self._epsilon.value = self._run_bottom_half(nutrients)
-                self._sync()
-                self._epsilon.value = max(
-                    self._epsilon.value, self._run_top_half(nutrients)
-                )
-            self._sync()
+                self._epsilon1 = self._run_bottom_half(nutrients)
 
-    def set_right_worker(self, pipe: object) -> None:
-        self._right_worker = pipe
+                if self._sync():
+                    return
 
-    def set_left_worker(self, pipe: object) -> None:
-        self._left_worker = pipe
+                self._epsilon2 = self._run_top_half(nutrients)
 
-    @property
-    def epsilon(self) -> float:
-        return self._epsilon.value
+            if self._sync():
+                return
+
+    def set_parent(self, pipe: object) -> None:
+        self._parent = pipe
 
 
 class DLA:
@@ -266,20 +268,19 @@ class DLA:
             )
             for i in range(self._workers)
         ]
+        pipes = []
         for i in range(self._workers):
             left_pipe, right_pipe = mp.Pipe(duplex=True)
-            worker_objects[i].set_left_worker(right_pipe)
-            worker_objects[i - 1].set_right_worker(left_pipe)
+            pipes.append(left_pipe)
+            worker_objects[i].set_parent(right_pipe)
         current_epsilon = self._epsilon + 1
+        worker_threads = [mp.Process(target=worker.run) for worker in worker_objects]
+        [worker.start() for worker in worker_threads]
+        current_epsilon = np.max([pipe.recv() for pipe in pipes])
         while current_epsilon > self._epsilon:
-            worker_threads = [
-                mp.Process(target=worker.run, args=(self._worker_step_size,))
-                for worker in worker_objects
-            ]
-            [worker.start() for worker in worker_threads]
-            [worker.join() for worker in worker_threads]
-            current_epsilon = np.max([worker.epsilon for worker in worker_objects])
-            print(current_epsilon)
+            [pipe.send(False) for pipe in pipes]
+            current_epsilon = np.max([pipe.recv() for pipe in pipes])
+        [pipe.send(True) for pipe in pipes]
         np.copyto(self._nutrients, nutrients_repr)
 
     def grow_candidate(self) -> None:
@@ -406,8 +407,8 @@ def show_growth(dla: DLA) -> None:
 
 
 def main() -> None:
-    grid_size = 1000
-    dla = DLA(grid_size, 1, omega=1.8, workers=32)
+    grid_size = 100
+    dla = DLA(grid_size, 1, omega=1.8, workers=16)
     show_growth(dla)
 
 
