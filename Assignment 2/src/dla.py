@@ -26,10 +26,10 @@ def _step_nutrients(
     nutrients: npt.NDArray,
     growths: npt.NDArray,
     omega: float,
-    first_row: int = 1,
-    last_row: int = -1,
-    first_column: int = 0,
-    last_column: int = -1,
+    first_row: int,
+    last_row: int,
+    first_column: int,
+    last_column: int,
 ) -> float:
     """Compute one SOR iteration step on the grid (JIT-compiled).
 
@@ -53,9 +53,8 @@ def _step_nutrients(
     """
     max_diff = 0.0
     grid_size = nutrients.shape[0]
-    last_column = grid_size - 1 if last_column == -1 else last_column
-    last_row = grid_size - 1 if last_row == -1 else last_row
-    for row in prange(first_row, last_row):
+    first_last_row = last_row if last_row == grid_size - 1 else last_row + 1
+    for row in prange(first_row, first_last_row):
         for column in prange(first_column, last_column + 1):
             if growths[row, column]:
                 continue
@@ -74,21 +73,22 @@ def _step_nutrients(
 
             nutrients[row, column] = new
 
-    for column in prange(first_column, last_column + 1):
-        if growths[last_row, column]:
-            continue
+    if last_row == grid_size - 1:
+        for column in prange(first_column, last_column + 1):
+            if growths[last_row, column]:
+                continue
 
-        up = nutrients[last_row, column]
-        left = nutrients[last_row, column - 1]
-        right = nutrients[last_row, (column + 1) % grid_size]
-        current = nutrients[last_row, column]
+            up = nutrients[last_row - 1, column]
+            left = nutrients[last_row, column - 1]
+            right = nutrients[last_row, (column + 1) % grid_size]
+            current = nutrients[last_row, column]
 
-        new = 1 / 3 * omega * (up + left + right) + (1 - omega) * current
+            new = 1 / 3 * omega * (up + left + right) + (1 - omega) * current
 
-        diff = abs(current - new)
-        max_diff = max(max_diff, diff)
+            diff = abs(current - new)
+            max_diff = max(max_diff, diff)
 
-        nutrients[last_row, column] = new
+            nutrients[last_row, column] = new
     return max_diff
 
 
@@ -117,13 +117,16 @@ class NutrientWorker:
         self._epsilon1 = 0.0
         self._epsilon2 = 0.0
 
-    def _sync(self) -> bool:
+    def _sync(self, nutrients: npt.NDArray) -> None:
         if self._parent is None:
             error = "Not all workers are connected"
             raise ValueError(error)
 
         self._parent.send(max(self._epsilon1, self._epsilon2))  # pyright: ignore[reportAttributeAccessIssue]
-        return self._parent.recv()  # pyright: ignore[reportAttributeAccessIssue]
+        row, column = self._parent.recv()  # pyright: ignore[reportAttributeAccessIssue]
+        if row != -1:
+            self._growths[row, column] = True
+            nutrients[row, column] = 0
 
     def _run_top_half(self, nutrients: npt.NDArray) -> float:
         return _step_nutrients(
@@ -142,7 +145,7 @@ class NutrientWorker:
             self._growths,
             self._omega,
             first_row=int(self._grid_size / 2) + 1,
-            last_row=-1,
+            last_row=self._grid_size - 1,
             first_column=self._begin_column,
             last_column=self._end_column,
         )
@@ -157,20 +160,17 @@ class NutrientWorker:
             if self._id % 2 == 0:
                 self._epsilon1 = self._run_top_half(nutrients)
 
-                if self._sync():
-                    return
+                self._sync(nutrients)
 
                 self._epsilon2 = self._run_bottom_half(nutrients)
             else:
                 self._epsilon1 = self._run_bottom_half(nutrients)
 
-                if self._sync():
-                    return
+                self._sync(nutrients)
 
                 self._epsilon2 = self._run_top_half(nutrients)
 
-            if self._sync():
-                return
+            self._sync(nutrients)
 
     def set_parent(self, pipe: object) -> None:
         self._parent = pipe
@@ -183,7 +183,6 @@ class DLA:
         eta: float,
         *,
         workers: int = 1,
-        worker_step_size: int = 1000,
         epsilon: float = 1e-10,
         omega: float = 1,
         seed: int = 43,
@@ -204,10 +203,15 @@ class DLA:
         self._omega = omega
         self._eta = eta
 
-        self._workers = workers
-        self._worker_step_size = worker_step_size
-
         self.reset_grid()
+
+        self._workers = workers
+        if self._workers > 1:
+            self.init_mp()
+
+    def __del__(self) -> None:
+        if self._workers > 1:
+            [worker.terminate() for worker in self._worker_threads]
 
     def reset_grid(self) -> None:
         """Reset the initial conditions for the nutrients, candidates and growths."""
@@ -224,6 +228,39 @@ class DLA:
         # Reset nutrient concentrations
         self._nutrients[1:, :] = 0
         self._nutrients[0, :] = 1
+
+    def init_mp(self) -> None:
+        nutrients_shared = mp.Array("d", self._grid_size * self._grid_size)
+        # X as a Numpy array
+        self._nutrients_repr = np.frombuffer(
+            nutrients_shared.get_obj(),
+            dtype=np.float64,
+        ).reshape((self._grid_size, self._grid_size))
+
+        # copy data to the shared array
+        np.copyto(self._nutrients_repr, self._nutrients)
+        width = np.ceil(self._grid_size / self._workers)
+        worker_objects = [
+            NutrientWorker(
+                i,
+                nutrients_shared,
+                grid_size=self._grid_size,
+                begin_column=int(i * width),
+                end_column=min((i + 1) * width - 1, self._grid_size - 1),
+                growths=self._growths,
+                omega=self._omega,
+            )
+            for i in range(self._workers)
+        ]
+        self._pipes = []
+        for i in range(self._workers):
+            left_pipe, right_pipe = mp.Pipe(duplex=True)
+            self._pipes.append(left_pipe)
+            worker_objects[i].set_parent(right_pipe)
+        self._worker_threads = [
+            mp.Process(target=worker.run) for worker in worker_objects
+        ]
+        [worker.start() for worker in self._worker_threads]
 
     def add_candidates(self, row: int, column: int) -> None:
         for row_offset, column_offset in [(-1, 0), (0, -1), (1, 0), (0, 1)]:
@@ -242,46 +279,18 @@ class DLA:
             self._candidate_array[new_row, new_column] = True
 
     def stabilize_nutrients(self) -> None:
-        while self.step_nutrients() > self._epsilon:
-            pass
+        current_epsilon = self.step_nutrients()
+        while current_epsilon > self._epsilon:
+            current_epsilon = self.step_nutrients()
+            print(current_epsilon)
 
     def stabilize_nutrients_mp(self) -> None:
-        nutrients_shared = mp.Array("d", self._grid_size * self._grid_size)
-        # X as a Numpy array
-        nutrients_repr = np.frombuffer(
-            nutrients_shared.get_obj(),
-            dtype=np.float64,
-        ).reshape((self._grid_size, self._grid_size))
-
-        # copy data to the shared array
-        np.copyto(nutrients_repr, self._nutrients)
-        width = np.ceil(self._grid_size / self._workers)
-        worker_objects = [
-            NutrientWorker(
-                i,
-                nutrients_shared,
-                grid_size=self._grid_size,
-                begin_column=int(i * width),
-                end_column=min((i + 1) * width - 1, self._grid_size - 1),
-                growths=self._growths,
-                omega=self._omega,
-            )
-            for i in range(self._workers)
-        ]
-        pipes = []
-        for i in range(self._workers):
-            left_pipe, right_pipe = mp.Pipe(duplex=True)
-            pipes.append(left_pipe)
-            worker_objects[i].set_parent(right_pipe)
-        current_epsilon = self._epsilon + 1
-        worker_threads = [mp.Process(target=worker.run) for worker in worker_objects]
-        [worker.start() for worker in worker_threads]
-        current_epsilon = np.max([pipe.recv() for pipe in pipes])
+        current_epsilon = np.max([pipe.recv() for pipe in self._pipes])
         while current_epsilon > self._epsilon:
-            [pipe.send(False) for pipe in pipes]
-            current_epsilon = np.max([pipe.recv() for pipe in pipes])
-        [pipe.send(True) for pipe in pipes]
-        np.copyto(self._nutrients, nutrients_repr)
+            [pipe.send((-1, -1)) for pipe in self._pipes]
+            current_epsilon = np.max([pipe.recv() for pipe in self._pipes])
+            print(current_epsilon)
+        np.copyto(self._nutrients, self._nutrients_repr)
 
     def grow_candidate(self) -> None:
         # Calculate probabilites for each candidate dependent on nutrient concentration
@@ -306,6 +315,8 @@ class DLA:
         self._candidate_list[index] = self._candidate_list[-1]
         self._candidate_list.pop()
         self.add_candidates(row, column)
+        if self._workers > 1:
+            [pipe.send((row, column)) for pipe in self._pipes]
 
     def step(self) -> None:
         if self._workers <= 1:
@@ -408,7 +419,7 @@ def show_growth(dla: DLA) -> None:
 
 def main() -> None:
     grid_size = 100
-    dla = DLA(grid_size, 1, omega=1.8, workers=16)
+    dla = DLA(grid_size, 1, omega=1.9, workers=1)
     show_growth(dla)
 
 
