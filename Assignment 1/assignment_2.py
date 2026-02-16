@@ -70,10 +70,10 @@ def concentration_timestep(c, delta_x, delta_t, D, tolerance):
             if delta_c < tolerance:
                 tolerance_counter += 1
 
-    print(f"Tolerance: {tolerance_counter} out of {(N - 2) * N} ({round(100 * tolerance_counter / ((N - 2) * N), 1)}%)")
+    # print(f"Tolerance: {tolerance_counter} out of {(N - 2) * N} ({round(100 * tolerance_counter / ((N - 2) * N), 1)}%)")
 
     if tolerance_counter == (N - 2) * N:
-        print("Tolerance reached for all grid points.")
+        # print("Tolerance reached for all grid points.")
         tolerance_reached = True
 
     return c_new, tolerance_reached
@@ -176,10 +176,28 @@ def parse_args() -> argparse.Namespace:
     """    
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "option", help="Determine the code to run", choices=["animated", "tolerance"]
+        "option", help="Determine the code to run", choices=["animated", "tolerance", "plot_timesteps"]
     )
     return parser.parse_args()
 
+def plot_timesteps(c: npt.NDArray, delta_x: float, delta_t: float, D: float, tolerance: float):
+    t_plotted = [0, 0.001, 0.01, 0.1, 1]
+    c_plotted = []
+    t0 = 0
+    tN = 1
+
+    time_step = 0
+    for i in np.arange(t0, tN + delta_t, delta_t):
+        c, _ = concentration_timestep(c, delta_x, delta_t, D, tolerance)
+
+        if (round(time_step, 4)) in t_plotted:
+            # print(round(time_step, 4))
+            c_plotted.append(c)
+
+        time_step += delta_t
+    c_plotted = np.array(c_plotted)
+
+    return c_plotted, t_plotted
 
 def main():
     parser = parse_args()
@@ -191,8 +209,6 @@ def main():
 
     # interval lengths
     N = 50
-    t0 = 0
-    tN = 5000
     delta_x = 1 / N
     delta_t = 0.0001
 
@@ -200,7 +216,7 @@ def main():
     D = 1
 
     # tolerance for the stopping criterion
-    p = 6
+    p = 4
     tolerance = 10 ** (-p)
     tolerance_reached = False
 
@@ -212,13 +228,24 @@ def main():
 
     if option == "animated":
         show_diffusion(c, delta_x, delta_t, D, tolerance)
+
     elif option == "tolerance":
         iteration_step = 0
         while tolerance_reached == False:
             c, tolerance_reached = concentration_timestep(c, delta_x, delta_t, D, tolerance)
             iteration_step += 1
         print(f"Tolerance reached after {iteration_step} iteration steps.")
-            
+
+    elif option == "plot_timesteps":
+        c_plotted, t_plotted = plot_timesteps(c, delta_x, delta_t, D, tolerance)
+        fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 4))
+        fig.suptitle("Concentration at different time steps")
+        for i in range(5):
+            axes[i].imshow(c_plotted[i])
+            axes[i].set_title(f"t = {t_plotted[i]} s")
+            axes[i].set_xlabel("x")
+            axes[i].set_ylabel("y")
+        plt.show()
 
 if __name__ == "__main__":
     main()
