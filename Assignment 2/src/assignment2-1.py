@@ -105,7 +105,7 @@ def gather_small() -> None:
     iterations = 100
     latencies = []
     for i in tqdm(range(iterations)):
-        grid = dla.DLA(grid_size, 1, epsilon=epsilon, omega=1.9, seed=i, workers=16)
+        grid = dla.DLA(grid_size, 1, epsilon=epsilon, omega=1.9, seed=i, workers=1)
         begin_time = time.time()
         for _ in range(steps):
             grid.step()

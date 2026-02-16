@@ -282,14 +282,12 @@ class DLA:
         current_epsilon = self.step_nutrients()
         while current_epsilon > self._epsilon:
             current_epsilon = self.step_nutrients()
-            print(current_epsilon)
 
     def stabilize_nutrients_mp(self) -> None:
         current_epsilon = np.max([pipe.recv() for pipe in self._pipes])
         while current_epsilon > self._epsilon:
             [pipe.send((-1, -1)) for pipe in self._pipes]
             current_epsilon = np.max([pipe.recv() for pipe in self._pipes])
-            print(current_epsilon)
         np.copyto(self._nutrients, self._nutrients_repr)
 
     def grow_candidate(self) -> None:
