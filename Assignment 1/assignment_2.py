@@ -229,7 +229,7 @@ def main():
     D = 1
 
     # tolerance for the stopping criterion
-    p = 4
+    p = 6
     tolerance = 10 ** (-p)
     tolerance_reached = False
 
@@ -247,7 +247,7 @@ def main():
         while tolerance_reached == False:
             c, tolerance_reached = concentration_timestep(c, delta_x, delta_t, D, tolerance)
             iteration_step += 1
-        print(f"Tolerance reached after {iteration_step} iteration steps.")
+        print(f"Tolerance reached after {iteration_step} iteration steps, for tolerance = {tolerance}.")
 
     elif option == "plot_timesteps":
         c_plotted, t_plotted = plot_timesteps(c, delta_x, delta_t, D, tolerance)
