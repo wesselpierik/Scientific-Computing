@@ -8,6 +8,7 @@ import numpy as np
 import numpy.typing as npt
 import matplotlib.pyplot as plt
 import argparse
+import numba
 
 def stability_condition(delta_t, delta_x, D):
     """Function to check whether the stability condition is satisfied for the specified time and space step sizes.
@@ -28,7 +29,7 @@ def stability_condition(delta_t, delta_x, D):
     print(f"The stability condition is not satisfied, value is: {stability_check}")
     return False
 
-
+@numba.njit
 def concentration_timestep(c, delta_x, delta_t, D, tolerance):
     """Function that updates the spatial grid for a single step size.
 
@@ -181,6 +182,18 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 def plot_timesteps(c: npt.NDArray, delta_x: float, delta_t: float, D: float, tolerance: float):
+    """Function that returns an array of grids for specific time steps to plot.
+
+    Args:
+        c (npt.NDArray): grids for indicated time steps
+        delta_x (float): space step size
+        delta_t (float): time step size
+        D (float): diffusion coefficient
+        tolerance (float): tolerance for the stopping criterion
+
+    Returns:
+        _type_: array of grids for specific time steps to plot
+    """    
     t_plotted = [0, 0.001, 0.01, 0.1, 1]
     c_plotted = []
     t0 = 0
