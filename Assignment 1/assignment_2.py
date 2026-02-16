@@ -43,27 +43,30 @@ def concentration_timestep(c, delta_x, delta_t, D, tolerance):
         npt.NDArray: updated array containing the concentration values after one time step
     """    
     N = c.shape[0]
+    c_new = np.copy(c)
     tolerance_counter = 0
+    tolerance_reached = False
+
     for x in range(N):
         for y in range(1, N - 1):
             c_k = c[y, x]
             # Boundary condition
             if x == N - 1:
-                c[y, x] = c[y, x] + delta_t * D / (delta_x**2) * (
+                c_new[y, x] = c[y, x] + delta_t * D / (delta_x**2) * (
                     c[y, 1] + c[y, x - 1] + c[y + 1, x] + c[y - 1, x] - 4 * c[y, x]
                 )
 
             elif x == 0:
-                c[y, x] = c[y, x] + delta_t * D / (delta_x**2) * (
+                c_new[y, x] = c[y, x] + delta_t * D / (delta_x**2) * (
                     c[y, x + 1] + c[y, -2] + c[y + 1, x] + c[y - 1, x] - 4 * c[y, x]
                 )
 
             else:
-                c[y, x] = c[y, x] + delta_t * D / (delta_x**2) * (
+                c_new[y, x] = c[y, x] + delta_t * D / (delta_x**2) * (
                     c[y, x + 1] + c[y, x - 1] + c[y + 1, x] + c[y - 1, x] - 4 * c[y, x]
                 )
 
-            delta_c = abs(c[y, x] - c_k)
+            delta_c = abs(c_new[y, x] - c_k)
             if delta_c < tolerance:
                 tolerance_counter += 1
 
@@ -71,8 +74,9 @@ def concentration_timestep(c, delta_x, delta_t, D, tolerance):
 
     if tolerance_counter == (N - 2) * N:
         print("Tolerance reached for all grid points.")
+        tolerance_reached = True
 
-    return c
+    return c_new, tolerance_reached
 
 
 def plot_analytic(t: float, D: float, N: int, *, axes: Axes | None = None):
@@ -126,7 +130,7 @@ def show_diffusion_step(
     Returns:
         list[Artist]: list containing the updated image artist
     """   
-    grid[0] = concentration_timestep(
+    grid[0], _ = concentration_timestep(
         grid[0],
         delta_x,
         delta_t,
@@ -172,7 +176,7 @@ def parse_args() -> argparse.Namespace:
     """    
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "option", help="Determine the code to run", choices=["animated", "print"]
+        "option", help="Determine the code to run", choices=["animated", "tolerance"]
     )
     return parser.parse_args()
 
@@ -198,6 +202,7 @@ def main():
     # tolerance for the stopping criterion
     p = 6
     tolerance = 10 ** (-p)
+    tolerance_reached = False
 
     # array with x and y
     c = np.zeros((N, N))
@@ -207,10 +212,13 @@ def main():
 
     if option == "animated":
         show_diffusion(c, delta_x, delta_t, D, tolerance)
-    elif option == "print":
-        for t in np.arange(t0, tN, delta_t):
-            c = concentration_timestep(c, delta_x, delta_t, D)
-            print(c)
+    elif option == "tolerance":
+        iteration_step = 0
+        while tolerance_reached == False:
+            c, tolerance_reached = concentration_timestep(c, delta_x, delta_t, D, tolerance)
+            iteration_step += 1
+        print(f"Tolerance reached after {iteration_step} iteration steps.")
+            
 
 if __name__ == "__main__":
     main()
