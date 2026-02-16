@@ -29,7 +29,7 @@ def stability_condition(delta_t, delta_x, D):
     return False
 
 
-def concentration_timestep(c, delta_x, delta_t, D):
+def concentration_timestep(c, delta_x, delta_t, D, tolerance):
     """Function that updates the spatial grid for a single step size.
 
     Args:
@@ -37,13 +37,16 @@ def concentration_timestep(c, delta_x, delta_t, D):
         delta_x (float): space step size (x and y directions have the same step size)
         delta_t (float): time step size
         D (float): diffusion coefficient
+        tolerance (float): tolerance for the stopping criterion
 
     Returns:
         npt.NDArray: updated array containing the concentration values after one time step
     """    
     N = c.shape[0]
+    tolerance_counter = 0
     for x in range(N):
         for y in range(1, N - 1):
+            c_k = c[y, x]
             # Boundary condition
             if x == N - 1:
                 c[y, x] = c[y, x] + delta_t * D / (delta_x**2) * (
@@ -59,6 +62,15 @@ def concentration_timestep(c, delta_x, delta_t, D):
                 c[y, x] = c[y, x] + delta_t * D / (delta_x**2) * (
                     c[y, x + 1] + c[y, x - 1] + c[y + 1, x] + c[y - 1, x] - 4 * c[y, x]
                 )
+
+            delta_c = abs(c[y, x] - c_k)
+            if delta_c < tolerance:
+                tolerance_counter += 1
+
+    print(f"Tolerance: {tolerance_counter} out of {(N - 2) * N} ({round(100 * tolerance_counter / ((N - 2) * N), 1)}%)")
+
+    if tolerance_counter == (N - 2) * N:
+        print("Tolerance reached for all grid points.")
 
     return c
 
@@ -99,6 +111,7 @@ def show_diffusion_step(
     delta_x: float,
     delta_t: float,
     D: float,
+    tolerance: float,
 ) -> list[Artist]:
     """Function to update the grid for a single time step and update the image for the animation.
 
@@ -109,7 +122,7 @@ def show_diffusion_step(
         delta_x (float): space step size
         delta_t (float): time step size
         D (float): diffusion coefficient
-
+        tolerance (float): tolerance for the stopping criterion
     Returns:
         list[Artist]: list containing the updated image artist
     """   
@@ -118,12 +131,15 @@ def show_diffusion_step(
         delta_x,
         delta_t,
         D,
+        tolerance
     )
+
     im.set_data(grid[0])
+
     return [im]
 
 
-def show_diffusion(c: npt.NDArray, delta_x: float, delta_t: float, D: float) -> None:
+def show_diffusion(c: npt.NDArray, delta_x: float, delta_t: float, D: float, tolerance: float) -> None:
     """Function to show the diffusion process as an animation.
 
     Args:
@@ -131,6 +147,7 @@ def show_diffusion(c: npt.NDArray, delta_x: float, delta_t: float, D: float) -> 
         delta_x (float): space step size
         delta_t (float): time step size
         D (float): diffusion coefficient
+        tolerance (float): tolerance for the stopping criterion
     """    
     fig = plt.figure()
     axis = fig.subplots(nrows=1)
@@ -138,10 +155,10 @@ def show_diffusion(c: npt.NDArray, delta_x: float, delta_t: float, D: float) -> 
     _anim = animation.FuncAnimation(
         fig,
         partial(
-            show_diffusion_step, grid=[c], im=im, delta_x=delta_x, delta_t=delta_t, D=D
+            show_diffusion_step, grid=[c], im=im, delta_x=delta_x, delta_t=delta_t, D=D, tolerance=tolerance
         ),
         100,
-        interval=100,
+        interval=0.01,
         blit=True,
     )
     plt.show()
@@ -155,7 +172,7 @@ def parse_args() -> argparse.Namespace:
     """    
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "option", help="Determine the code to run", choices=["animated"]
+        "option", help="Determine the code to run", choices=["animated", "print"]
     )
     return parser.parse_args()
 
@@ -171,12 +188,16 @@ def main():
     # interval lengths
     N = 50
     t0 = 0
-    tN = 1000
+    tN = 5000
     delta_x = 1 / N
     delta_t = 0.0001
 
     # parameters
     D = 1
+
+    # tolerance for the stopping criterion
+    p = 6
+    tolerance = 10 ** (-p)
 
     # array with x and y
     c = np.zeros((N, N))
@@ -185,8 +206,8 @@ def main():
     stability = stability_condition(delta_t, delta_x, D)
 
     if option == "animated":
-        show_diffusion(c, delta_x, delta_t, D)
-    else:
+        show_diffusion(c, delta_x, delta_t, D, tolerance)
+    elif option == "print":
         for t in np.arange(t0, tN, delta_t):
             c = concentration_timestep(c, delta_x, delta_t, D)
             print(c)
