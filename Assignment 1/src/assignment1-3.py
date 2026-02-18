@@ -13,7 +13,11 @@ from time_independent import SOR, BaseGrid, GaussSeidel, Jacobi, SOR_Insulating
 
 
 def concentration_curve(
-    grid: BaseGrid, *, axis: Axes | None = None, column: int = 0
+    grid: BaseGrid,
+    *,
+    axis: Axes | None = None,
+    column: int = 0,
+    add_legend: bool = True,
 ) -> None:
     if axis is None:
         axis = plt.subplot()
@@ -32,27 +36,34 @@ def concentration_curve(
             grid.state[:, column],
             label=f"{checkpoint}",
         )
-    axis.legend()
+    if add_legend:
+        axis.legend()
 
 
 def assignment_h() -> None:
     grid_size = 50
-    fig = plt.figure(figsize=(10, 3))
+    fig = plt.figure(figsize=(8, 4))
     axes = fig.subplots(ncols=3)
 
     jacobi = Jacobi(grid_size)
     axes[0].set_title("Jacobi")
-    concentration_curve(jacobi, axis=axes[0])
+    concentration_curve(jacobi, axis=axes[0], add_legend=False)
 
     axes[1].set_title("Gauss-Seidel")
     gauss = GaussSeidel(grid_size)
-    concentration_curve(gauss, axis=axes[1])
+    concentration_curve(gauss, axis=axes[1], add_legend=False)
 
     axes[2].set_title("Successive Over Relaxation")
     sor = SOR(grid_size, 1.7)
-    concentration_curve(sor, axis=axes[2])
+    concentration_curve(sor, axis=axes[2], add_legend=False)
+
+    # Add a single legend on top of the plots
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.0), ncol=5)
 
     plt.show()
+    # fig.tight_layout()
+    # plt.savefig(fname="figure.png", dpi=300)
 
 
 def plot_deltas(grid: BaseGrid, axis: Axes, label: str):
@@ -78,6 +89,7 @@ def assignment_i() -> None:
     axis.grid()
     axis.set_xlabel("k (steps)")
     axis.set_ylabel(r"$\delta$")
+    axis.set_title("Convergence measure over iterations")
     axis.legend()
     plt.show()
 
@@ -150,14 +162,14 @@ def show_sinks(grid: BaseGrid, axis: Axes, title: str) -> int:
 
 def assignment_k() -> None:
     grid_size = 50
-    fig = plt.figure(figsize=(20, 3))
-    axes = fig.subplots(ncols=5)
+    fig = plt.figure(figsize=(6, 4))
+    axes = fig.subplots(nrows=2, ncols=2)
 
-    # Large sink heatmap
-    grid = SOR(grid_size, 1.9)
-    sink_large = (10, 5, 15, 35)
-    grid.add_sink(*sink_large)
-    steps_large = show_sinks(grid, axes[0], "Concentration large sink")
+    # # Large sink heatmap
+    # grid = SOR(grid_size, 1.9)
+    # sink_large = (10, 5, 15, 35)
+    # grid.add_sink(*sink_large)
+    # steps_large = show_sinks(grid, axes[0], "Concentration large sink")
 
     # Random sinks heatmap
     grid = SOR(grid_size, 1.9)
@@ -169,27 +181,27 @@ def assignment_k() -> None:
         sink = (row, row, column, column)
         sinks_random.append(sink)
         grid.add_sink(*sink)
-    steps_random = show_sinks(grid, axes[1], "Concentration random sinks")
-    fig.colorbar(axes[0].get_images()[0], ax=axes)
+    steps_random = show_sinks(grid, axes[0, 0], "Random sinks")
+    fig.colorbar(axes[0, 0].get_images()[0], ax=axes)
 
     # Different locations for sinks heatmap
     ## Top
     grid = SOR(grid_size, 1.9)
     sink_top = (10, 5, 25, 25)
     grid.add_sink(*sink_top)
-    steps_top = show_sinks(grid, axes[2], "Concentration top sink")
+    steps_top = show_sinks(grid, axes[0, 1], "Top sink")
 
     ## Middle
     grid = SOR(grid_size, 1.9)
     sink_middle = (25, 20, 25, 25)
     grid.add_sink(*sink_middle)
-    steps_middle = show_sinks(grid, axes[3], "Concentration middle sink")
+    steps_middle = show_sinks(grid, axes[1, 0], "Middle sink")
 
     ## Bottom
     grid = SOR(grid_size, 1.9)
     sink_bottom = (45, 40, 25, 25)
     grid.add_sink(*sink_bottom)
-    steps_bottom = show_sinks(grid, axes[4], "Concentration bottom sink")
+    steps_bottom = show_sinks(grid, axes[1, 1], "Bottom sink")
 
     plt.show()
 
@@ -200,10 +212,9 @@ def assignment_k() -> None:
     # Bar plots showing required number of steps
     grid = SOR(grid_size, 1.9)
     steps_normal = run_till_condition(grid, 1e-10, 50000)
-    sink_types = ["Normal", "Large", "Random", "Top", "Middle", "Bottom"]
+    sink_types = ["Normal", "Random", "Top", "Middle", "Bottom"]
     steps_data = [
         steps_normal,
-        steps_large,
         steps_random,
         steps_top,
         steps_middle,
@@ -215,11 +226,10 @@ def assignment_k() -> None:
     axes[0].grid(axis="y")
 
     # Bar plots showing optimum omega
-    sink_types = ["Normal", "Large", "Random", "Top", "Middle", "Bottom"]
+    sink_types = ["Normal", "Random", "Top", "Middle", "Bottom"]
     normal_w = optimize_w(grid_size)
     steps_data = [
         normal_w,
-        optimize_w(grid_size, sinks=[sink_large]),
         optimize_w(grid_size, sinks=sinks_random),
         optimize_w(grid_size, sinks=[sink_top]),
         optimize_w(grid_size, sinks=[sink_middle]),
