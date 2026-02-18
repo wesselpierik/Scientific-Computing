@@ -228,7 +228,7 @@ def assignment_k() -> None:
     axes[1].set_ylim(1.5, 2)
     axes[1].hlines(normal_w, -10, 10, color="red", linestyles="dashed")
     axes[1].bar(sink_types, steps_data)
-    axes[1].set_ylabel("Steps to convergence")
+    axes[1].set_ylabel(r"optimal $\omega$")
     axes[1].set_title("Convergence speed by sink type")
     yticks = [*axes[1].get_yticks(), normal_w]
     yticklabels = [*axes[1].get_yticklabels(), f"{normal_w:.2f}"]
