@@ -153,7 +153,7 @@ def show_sinks(grid: BaseGrid, axis: Axes, title: str) -> int:
     epsilon = 1e-10
     max_steps = 100000
     steps = run_till_condition(grid, epsilon, max_steps)
-    axis.imshow(grid.state, cmap="viridis")
+    axis.imshow(np.flip(grid.state, axis=0), cmap="viridis", origin="lower")
     axis.set_title(title)
     axis.set_xlabel("x")
     axis.set_ylabel("y")
@@ -172,7 +172,7 @@ def assignment_k() -> None:
     # steps_large = show_sinks(grid, axes[0], "Concentration large sink")
 
     # Random sinks heatmap
-    grid = SOR(grid_size, 1.9)
+    grid = GaussSeidel(grid_size)
     seed = 43
     gen = np.random.Generator(np.random.PCG64(seed))
     sinks_random = []
@@ -186,19 +186,19 @@ def assignment_k() -> None:
 
     # Different locations for sinks heatmap
     ## Top
-    grid = SOR(grid_size, 1.9)
+    grid = GaussSeidel(grid_size)
     sink_top = (10, 5, 25, 25)
     grid.add_sink(*sink_top)
     steps_top = show_sinks(grid, axes[0, 1], "Top sink")
 
     ## Middle
-    grid = SOR(grid_size, 1.9)
+    grid = GaussSeidel(grid_size)
     sink_middle = (25, 20, 25, 25)
     grid.add_sink(*sink_middle)
     steps_middle = show_sinks(grid, axes[1, 0], "Middle sink")
 
     ## Bottom
-    grid = SOR(grid_size, 1.9)
+    grid = GaussSeidel(grid_size)
     sink_bottom = (45, 40, 25, 25)
     grid.add_sink(*sink_bottom)
     steps_bottom = show_sinks(grid, axes[1, 1], "Bottom sink")
@@ -210,7 +210,7 @@ def assignment_k() -> None:
     axes = fig.subplots(nrows=1, ncols=2)
 
     # Bar plots showing required number of steps
-    grid = SOR(grid_size, 1.9)
+    grid = GaussSeidel(grid_size)
     steps_normal = run_till_condition(grid, 1e-10, 50000)
     sink_types = ["Normal", "Random", "Top", "Middle", "Bottom"]
     steps_data = [
@@ -356,7 +356,7 @@ def show_diffusion_step(frame: int, grid: BaseGrid, im: AxesImage) -> list[Artis
 def show_diffusion(grid: BaseGrid) -> None:
     fig = plt.figure()
     axis = fig.subplots(nrows=1)
-    im = axis.imshow(grid.state)
+    im = axis.imshow(np.flip(grid.state, axis=0), origin="lower")
     _anim = animation.FuncAnimation(
         fig,
         partial(show_diffusion_step, grid=grid, im=im),
