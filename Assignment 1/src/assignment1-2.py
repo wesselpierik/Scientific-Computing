@@ -79,7 +79,6 @@ def concentration_timestep(c, delta_x, delta_t, D, tolerance):
 
     return c_new, tolerance_reached
 
-
 def plot_analytic(t: float, D: float, N: int, *, axes: Axes | None = None):
     """Function to plot the analytical solution of the diffusion equation for a given time t, diffusion coefficient D and number of grid points N.
 
@@ -106,6 +105,10 @@ def plot_analytic(t: float, D: float, N: int, *, axes: Axes | None = None):
         for y in y_range
     ]
     axes.plot(y_range, c)
+    axes.set_xlabel("y")
+    axes.set_ylabel("c(y)")
+    axes.set_title(f"Analytical solution of the diffusion equation at t = {t}")
+    plt.show()
 
 
 # Animated grid functions:
@@ -156,7 +159,7 @@ def show_diffusion(c: npt.NDArray, delta_x: float, delta_t: float, D: float, tol
     """    
     fig = plt.figure()
     axis = fig.subplots(nrows=1)
-    im = axis.imshow(c)
+    im = axis.imshow(c, origin="lower")
     _anim = animation.FuncAnimation(
         fig,
         partial(
@@ -177,7 +180,7 @@ def parse_args() -> argparse.Namespace:
     """    
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "option", help="Determine the code to run", choices=["animated", "tolerance", "plot_timesteps"]
+        "option", help="Determine the code to run", choices=["animated", "tolerance", "plot_timesteps", "plot_analytic"]
     )
     return parser.parse_args()
 
@@ -235,9 +238,9 @@ def main():
 
     # array with x and y
     c = np.zeros((N, N))
-    c[0,] = c_y1
+    c[N-1,] = c_y1
 
-    stability = stability_condition(delta_t, delta_x, D)
+    # stability = stability_condition(delta_t, delta_x, D)
 
     if option == "animated":
         show_diffusion(c, delta_x, delta_t, D, tolerance)
@@ -259,6 +262,25 @@ def main():
             axes[i].set_xlabel("x")
             axes[i].set_ylabel("y")
         plt.show()
+
+    elif option == "plot_analytic":
+        c_simulated, t_simulated = plot_timesteps(c, delta_x, delta_t, D, tolerance)
+
+        # take x = 0.5 of the simulated plot to get c(y)
+        c_simulated_y = c_simulated[:, :, int(N / 2)]
+        print(t_simulated)
+        fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 4))
+        fig.suptitle("Simulated concentration at x = 0.5 for different time steps")
+        for i in range(5):
+            axes[i].plot(np.linspace(0, 1, N), c_simulated_y[i])
+            axes[i].set_title(f"t = {t_simulated[i]}")
+            axes[i].set_xlabel("y")
+            axes[i].set_ylabel("c(y)")
+        plt.show()
+
+        t_analytic = np.array([0.0, 0.001, 0.01, 0.1, 1])
+        for t in t_analytic:
+            plot_analytic(t = t, D = D, N = N)
 
 if __name__ == "__main__":
     main()
