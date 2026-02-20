@@ -291,7 +291,7 @@ def main():
             ax = axs[1]
             for i in range(len(t_analytic)):
                 ax.plot(y, c_simulated_y[i], label=f"t = {t_simulated[i+1]}")
-            ax.set_title(f"Simulated solution")
+            ax.set_title(f"Simulated solution at x = 0.5")
 
             for ax in axs.ravel():
                 ax.xaxis.set_minor_locator(MultipleLocator(0.05))
