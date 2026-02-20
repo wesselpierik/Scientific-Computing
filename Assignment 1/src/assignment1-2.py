@@ -4,6 +4,7 @@ from matplotlib.artist import Artist
 from matplotlib.axes import Axes
 from matplotlib.image import AxesImage
 from matplotlib import animation
+from matplotlib.ticker import MultipleLocator
 import numpy as np
 import numpy.typing as npt
 import matplotlib.pyplot as plt
@@ -88,7 +89,7 @@ def plot_analytic(D: float, N: int):
         N (int): number of grid points
         axes (Axes | None, optional): matplotlib axes object. Defaults to None.
     """    
-    t_plotted = np.array([0.0, 0.001, 0.01, 0.1, 1])
+    t_plotted = np.array([0.001, 0.01, 0.1, 1])
     c_plotted = []
 
     # if axes is None:
@@ -203,7 +204,7 @@ def plot_timesteps(c: npt.NDArray, delta_x: float, delta_t: float, D: float, tol
     Returns:
         _type_: array of grids for specific time steps to plot
     """    
-    t_plotted = np.array([0.0, 0.001, 0.01, 0.1, 1])
+    t_plotted = np.array([0.001, 0.01, 0.1, 1])
     c_plotted = []
     t0 = 0
     tN = 1
@@ -271,19 +272,34 @@ def main():
     elif option == "plot_analytic":
         c_analytic, t_analytic = plot_analytic(D, N)
         c_simulated, t_simulated = plot_timesteps(c, delta_x, delta_t, D, tolerance)
+        y = np.linspace(0, 1, N)
 
         # take x = 0.5 of the simulated plot to get c(y)
         c_simulated_y = c_simulated[:, :, int(N / 2)]
         print(t_simulated)
-        fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 4))
-        fig.suptitle("Simulated concentration at x = 0.5 for different time steps")
-        for i in range(5):
-            axes[i].plot(np.linspace(0, 1, N), c_simulated_y[i])
-            axes[i].set_title(f"t = {t_simulated[i]}")
-            axes[i].set_xlabel("y")
-            axes[i].set_ylabel("c(y)")
-        plt.show()
 
+        fig, axs = plt.subplots(nrows=1, ncols=2, layout='constrained')
+        fig.suptitle(r"Analytical solution and simulated solution at different time steps", fontsize=16)
+
+        ax = axs[0]
+        for i in range(len(t_analytic)):
+            ax.plot(y, c_analytic[i], label=f"t = {t_analytic[i]} s")
+
+        ax.set_title(f"Analytical solution")
+
+        ax = axs[1]
+        for i in range(len(t_simulated)):
+            ax.plot(y, c_simulated_y[i], label=f"t = {t_simulated[i]} s")
+
+        ax.set_title(f"Simulated solution")
+
+        for ax in axs.ravel():
+            ax.xaxis.set_minor_locator(MultipleLocator(0.05))
+            ax.set_xlabel("y")
+            ax.set_ylabel("c(y)")
+            ax.grid(True)
+            ax.legend()
+        plt.show()
 
 if __name__ == "__main__":
     main()
