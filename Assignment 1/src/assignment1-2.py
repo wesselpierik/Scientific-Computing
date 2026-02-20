@@ -83,20 +83,17 @@ def concentration_timestep(c, delta_x, delta_t, D, tolerance):
     return c_new, tolerance_reached
 
 def plot_analytic(D: float, N: int):
-    """Function to plot the analytical solution of the diffusion equation for a given time t, diffusion coefficient D and number of grid points N.
+    """Function to get the analytical solution of the diffusion equation for given times t, diffusion coefficient D and number of grid points N.
 
     Args:
-        t (float): time
         D (float): diffusion coefficient
         N (int): number of grid points
-        axes (Axes | None, optional): matplotlib axes object. Defaults to None.
+
+    Returns:
+        _type_: array of concentration values for different time steps and the corresponding time steps
     """    
     t_plotted = np.array([0.001, 0.01, 0.1, 1])
     c_plotted = []
-
-    # if axes is None:
-    #     fig = plt.figure()
-    #     axes = fig.subplots(nrows=1, ncols=1)
     i_max = 100
 
     for t in range(len(t_plotted)):
@@ -113,11 +110,7 @@ def plot_analytic(D: float, N: int):
         ]
 
         c_plotted.append(c)
-    # axes.plot(y_range, c)
-    # axes.set_xlabel("y")
-    # axes.set_ylabel("c(y)")
-    # axes.set_title(f"Analytical solution of the diffusion equation at t = {t}")
-    # plt.show()
+
     return np.array(c_plotted), t_plotted
 
 # Animated grid functions:
@@ -206,7 +199,7 @@ def plot_timesteps(c: npt.NDArray, delta_x: float, delta_t: float, D: float, tol
     Returns:
         _type_: array of grids for specific time steps to plot
     """    
-    t_plotted = np.array([0.001, 0.01, 0.1, 1])
+    t_plotted = np.array([0.0, 0.001, 0.01, 0.1, 1])
     c_plotted = []
     t0 = 0
     tN = 1
@@ -248,7 +241,7 @@ def main():
     c = np.zeros((N, N))
     c[N-1,] = c_y1
 
-    # stability = stability_condition(delta_t, delta_x, D)
+    stability_condition(delta_t, delta_x, D)
 
     if option == "animated":
         show_diffusion(c, delta_x, delta_t, D, tolerance)
@@ -262,14 +255,20 @@ def main():
 
     elif option == "plot_timesteps":
         c_plotted, t_plotted = plot_timesteps(c, delta_x, delta_t, D, tolerance)
-        fig, axes = plt.subplots(nrows=1, ncols=5, figsize=(20, 4))
-        fig.suptitle("Concentration at different time steps")
-        for i in range(5):
-            axes[i].imshow(c_plotted[i])
-            axes[i].set_title(f"t = {t_plotted[i]} s")
-            axes[i].set_xlabel("x")
-            axes[i].set_ylabel("y")
-        plt.show()
+
+        with plt.rc_context(rcCustom_wide):
+            fig, axs = plt.subplots(nrows=1, ncols=5, layout='constrained')
+            # fig.suptitle(r"Concentration at different time steps", fontsize=16)
+            ims = []
+            for i in range(5):
+                ax = axs[i]
+                im = ax.imshow(c_plotted[i], origin="lower")
+                ims.append(im)
+                ax.set_title(f"t = {t_plotted[i]}")
+                ax.set_xlabel("x")
+                ax.set_ylabel("y")
+            fig.colorbar(ims[0], ax=axs, shrink=0.26)
+            plt.show()
 
     elif option == "plot_analytic":
         c_analytic, t_analytic = plot_analytic(D, N)
@@ -282,16 +281,16 @@ def main():
 
         with plt.rc_context(rc=rcCustom_wide):
             fig, axs = plt.subplots(nrows=1, ncols=2, layout='constrained')
-            fig.suptitle(r"Analytical solution and simulated solution at different time steps", fontsize=16)
+            # fig.suptitle(r"Analytical solution and simulated solution at different time steps", fontsize=16)
 
             ax = axs[0]
             for i in range(len(t_analytic)):
-                ax.plot(y, c_analytic[i], label=f"t = {t_analytic[i]} s")
+                ax.plot(y, c_analytic[i], label=f"t = {t_analytic[i]}")
             ax.set_title(f"Analytical solution")
 
             ax = axs[1]
-            for i in range(len(t_simulated)):
-                ax.plot(y, c_simulated_y[i], label=f"t = {t_simulated[i]} s")
+            for i in range(len(t_analytic)):
+                ax.plot(y, c_simulated_y[i], label=f"t = {t_simulated[i+1]}")
             ax.set_title(f"Simulated solution")
 
             for ax in axs.ravel():
