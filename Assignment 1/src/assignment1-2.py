@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import argparse
 import numba
 
+from plots import rcCustom, rcCustom_wide
+
 def stability_condition(delta_t, delta_x, D):
     """Function to check whether the stability condition is satisfied for the specified time and space step sizes.
 
@@ -278,28 +280,27 @@ def main():
         c_simulated_y = c_simulated[:, :, int(N / 2)]
         print(t_simulated)
 
-        fig, axs = plt.subplots(nrows=1, ncols=2, layout='constrained')
-        fig.suptitle(r"Analytical solution and simulated solution at different time steps", fontsize=16)
+        with plt.rc_context(rc=rcCustom_wide):
+            fig, axs = plt.subplots(nrows=1, ncols=2, layout='constrained')
+            fig.suptitle(r"Analytical solution and simulated solution at different time steps", fontsize=16)
 
-        ax = axs[0]
-        for i in range(len(t_analytic)):
-            ax.plot(y, c_analytic[i], label=f"t = {t_analytic[i]} s")
+            ax = axs[0]
+            for i in range(len(t_analytic)):
+                ax.plot(y, c_analytic[i], label=f"t = {t_analytic[i]} s")
+            ax.set_title(f"Analytical solution")
 
-        ax.set_title(f"Analytical solution")
+            ax = axs[1]
+            for i in range(len(t_simulated)):
+                ax.plot(y, c_simulated_y[i], label=f"t = {t_simulated[i]} s")
+            ax.set_title(f"Simulated solution")
 
-        ax = axs[1]
-        for i in range(len(t_simulated)):
-            ax.plot(y, c_simulated_y[i], label=f"t = {t_simulated[i]} s")
-
-        ax.set_title(f"Simulated solution")
-
-        for ax in axs.ravel():
-            ax.xaxis.set_minor_locator(MultipleLocator(0.05))
-            ax.set_xlabel("y")
-            ax.set_ylabel("c(y)")
-            ax.grid(True)
-            ax.legend()
-        plt.show()
+            for ax in axs.ravel():
+                ax.xaxis.set_minor_locator(MultipleLocator(0.05))
+                ax.set_xlabel("y")
+                ax.set_ylabel("c(y)")
+                ax.grid(True)
+                ax.legend()
+            plt.show()
 
 if __name__ == "__main__":
     main()
