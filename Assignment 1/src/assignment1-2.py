@@ -233,7 +233,7 @@ def main():
     D = 1
 
     # tolerance for the stopping criterion
-    p = 6
+    p = 8
     tolerance = 10 ** (-p)
     tolerance_reached = False
 
