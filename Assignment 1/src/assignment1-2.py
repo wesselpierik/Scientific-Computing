@@ -79,7 +79,7 @@ def concentration_timestep(c, delta_x, delta_t, D, tolerance):
 
     return c_new, tolerance_reached
 
-def plot_analytic(t: float, D: float, N: int, *, axes: Axes | None = None):
+def plot_analytic(D: float, N: int):
     """Function to plot the analytical solution of the diffusion equation for a given time t, diffusion coefficient D and number of grid points N.
 
     Args:
@@ -88,28 +88,34 @@ def plot_analytic(t: float, D: float, N: int, *, axes: Axes | None = None):
         N (int): number of grid points
         axes (Axes | None, optional): matplotlib axes object. Defaults to None.
     """    
-    if axes is None:
-        fig = plt.figure()
-        axes = fig.subplots(nrows=1, ncols=1)
+    t_plotted = np.array([0.0, 0.001, 0.01, 0.1, 1])
+    c_plotted = []
 
-    y_range = np.linspace(0, 1, N)
+    # if axes is None:
+    #     fig = plt.figure()
+    #     axes = fig.subplots(nrows=1, ncols=1)
     i_max = 100
-    c = [
-        sum(
-            [
-                math.erfc((1 - y + 2 * i) / 2 * math.sqrt(D * t))
-                - math.erfc((1 + y + 2 * i) / 2 * math.sqrt(D * t))
-                for i in range(i_max)
-            ]
-        )
-        for y in y_range
-    ]
-    axes.plot(y_range, c)
-    axes.set_xlabel("y")
-    axes.set_ylabel("c(y)")
-    axes.set_title(f"Analytical solution of the diffusion equation at t = {t}")
-    plt.show()
 
+    for t in range(len(t_plotted)):
+        y_range = np.linspace(0, 1, N)
+        c = [
+            sum(
+                [
+                    math.erfc((1 - y + 2 * i) / (2 * math.sqrt(D * t_plotted[t])))
+                    - math.erfc((1 + y + 2 * i) / (2 * math.sqrt(D * t_plotted[t])))
+                    for i in range(i_max)
+                ]
+            )
+            for y in y_range
+        ]
+
+        c_plotted.append(c)
+    # axes.plot(y_range, c)
+    # axes.set_xlabel("y")
+    # axes.set_ylabel("c(y)")
+    # axes.set_title(f"Analytical solution of the diffusion equation at t = {t}")
+    # plt.show()
+    return np.array(c_plotted), t_plotted
 
 # Animated grid functions:
 def show_diffusion_step(
@@ -197,7 +203,7 @@ def plot_timesteps(c: npt.NDArray, delta_x: float, delta_t: float, D: float, tol
     Returns:
         _type_: array of grids for specific time steps to plot
     """    
-    t_plotted = [0, 0.001, 0.01, 0.1, 1]
+    t_plotted = np.array([0.0, 0.001, 0.01, 0.1, 1])
     c_plotted = []
     t0 = 0
     tN = 1
@@ -211,9 +217,8 @@ def plot_timesteps(c: npt.NDArray, delta_x: float, delta_t: float, D: float, tol
             c_plotted.append(c)
 
         time_step += delta_t
-    c_plotted = np.array(c_plotted)
 
-    return c_plotted, t_plotted
+    return np.array(c_plotted), t_plotted
 
 def main():
     parser = parse_args()
@@ -264,6 +269,7 @@ def main():
         plt.show()
 
     elif option == "plot_analytic":
+        c_analytic, t_analytic = plot_analytic(D, N)
         c_simulated, t_simulated = plot_timesteps(c, delta_x, delta_t, D, tolerance)
 
         # take x = 0.5 of the simulated plot to get c(y)
@@ -278,9 +284,6 @@ def main():
             axes[i].set_ylabel("c(y)")
         plt.show()
 
-        t_analytic = np.array([0.0, 0.001, 0.01, 0.1, 1])
-        for t in t_analytic:
-            plot_analytic(t = t, D = D, N = N)
 
 if __name__ == "__main__":
     main()
