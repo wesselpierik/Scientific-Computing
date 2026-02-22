@@ -251,7 +251,7 @@ def main():
         while tolerance_reached == False:
             c, tolerance_reached = concentration_timestep(c, delta_x, delta_t, D, tolerance)
             iteration_step += 1
-        print(f"Tolerance reached after {iteration_step} iteration steps, for tolerance = {tolerance}.")
+        print(f"Tolerance reached after {iteration_step} iteration steps (at t={delta_t * iteration_step}), for tolerance = {tolerance}.")
 
     elif option == "plot_timesteps":
         c_plotted, t_plotted = plot_timesteps(c, delta_x, delta_t, D, tolerance)
@@ -290,7 +290,7 @@ def main():
 
             ax = axs[1]
             for i in range(len(t_analytic)):
-                ax.plot(y, c_simulated_y[i], label=f"t = {t_simulated[i+1]}")
+                ax.plot(y, c_simulated_y[i+1], label=f"t = {t_simulated[i+1]}")
             ax.set_title(f"Simulated solution at x = 0.5")
 
             for ax in axs.ravel():
