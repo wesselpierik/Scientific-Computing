@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import ArtistAnimation
 import numba
-import tqdm
 import argparse
 
 L = 10
@@ -136,61 +135,6 @@ def multi_animation(ax, arr1, arr2, xs=None):
             artists.append([line_1, line_2, legend])
 
     return artists
-
-
-@numba.njit(cache=True, fastmath=True)
-def max_abs(arr, col):
-    max = 0
-    for i in range(arr.shape[0]):
-        v = arr[i, col]
-        if v < 0:
-            v = -v
-        if v > max:
-            max = v
-
-    return max
-
-
-@numba.njit(cache=True, fastmath=True)
-def run_research_euler(arr, vs, prev_t, next_t):
-    update_euler(arr, vs, prev_t, next_t, c, dx, dt)
-    return compute_energy(arr, vs, next_t)
-
-
-@numba.njit(cache=True, fastmath=True)
-def run_research_leapfrog(arr, vs, prev_t, next_t):
-    update_leapfrog(arr, vs, prev_t, next_t, c, dx, dt)
-    return compute_energy(arr, vs, next_t)
-
-
-def research_stability_euler():
-    arr = initialize_small(L, N, num_ts, init_function, 2, start=0.2, end=0.4)
-    vs = np.zeros((N,))
-    energy = np.empty(num_ts)
-    energy[0] = compute_energy(arr, vs, 0)
-    energy[1] = compute_energy(arr, vs, 1)
-    tk0 = tqdm.tqdm(range(2, num_ts), total=num_ts - 2, disable=None)
-    prev, next = 0, 1
-    for t in tk0:
-        energy[t] = run_research_euler(arr, vs, prev, next)
-        prev, next = next, prev
-
-    return energy
-
-
-def research_stability_leapfrog():
-    arr = initialize_small(L, N, num_ts, init_function, 2, start=0.2, end=0.4)
-    vs = np.zeros((N,))
-    energy = np.empty(num_ts)
-    energy[0] = compute_energy(arr, vs, 0)
-    energy[1] = compute_energy(arr, vs, 1)
-    tk0 = tqdm.tqdm(range(2, num_ts), total=num_ts - 2, disable=None)
-    prev, next = 0, 1
-    for t in tk0:
-        energy[t] = run_research_leapfrog(arr, vs, prev, next)
-        prev, next = next, prev
-
-    return energy
 
 
 def run_case(
@@ -451,9 +395,9 @@ def assignment_optional():
         ax.legend()
 
     axes[0].set_ylabel("Total energy")
-    fig.suptitle("Optional: Total energy vs time for increasing dt")
+    fig.suptitle("Total energy vs time for different dt")
     fig.tight_layout()
-    fig.savefig("optional_energy_stability.png", dpi=300, bbox_inches="tight")
+    fig.savefig("optional.png", dpi=300, bbox_inches="tight")
     plt.show()
 
 
