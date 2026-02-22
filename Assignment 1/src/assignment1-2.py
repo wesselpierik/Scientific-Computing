@@ -57,12 +57,12 @@ def concentration_timestep(c, delta_x, delta_t, D, tolerance):
             # Boundary condition
             if x == N - 1:
                 c_new[y, x] = c[y, x] + delta_t * D / (delta_x**2) * (
-                    c[y, 1] + c[y, x - 1] + c[y + 1, x] + c[y - 1, x] - 4 * c[y, x]
+                    c[y, 0] + c[y, x - 1] + c[y + 1, x] + c[y - 1, x] - 4 * c[y, x]
                 )
 
             elif x == 0:
                 c_new[y, x] = c[y, x] + delta_t * D / (delta_x**2) * (
-                    c[y, x + 1] + c[y, -2] + c[y + 1, x] + c[y - 1, x] - 4 * c[y, x]
+                    c[y, x + 1] + c[y, -1] + c[y + 1, x] + c[y - 1, x] - 4 * c[y, x]
                 )
 
             else:
