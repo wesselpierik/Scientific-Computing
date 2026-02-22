@@ -1,12 +1,26 @@
 # Assignment 1
 ## Structure:
 - src/: Source python files:
+  - src/assignment1-1.py: Logic and Plotting for vibrating string
   - src/assignment1-2.py: Logic and Plotting for time dependent diffusion.
   - src/assignment1-3.py: Plotting functionality for time independent diffusion
   - src/time_independent.py: Logic for the time independent diffusion grid, including the Jacobi, Gauss-Seidel and SOR iteration.
 - Team_effort_distribution_template.docx: The team effort distribution, including the results of git-fame.
 
 ## Examples
+### Vibrating string
+The assignments B and D can be run by calling:
+```bash
+python src/assignment1-1.py <option>
+```
+, where the option is the character defining the assignment.
+
+The optional assignment can be run with
+```bash
+python src/assignment1-1.py Optional
+```
+
+
 ### Time Dependent Diffusion
 The assignments D to F can be run by calling:
 ```bash
