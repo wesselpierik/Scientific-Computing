@@ -451,9 +451,9 @@ def assignment_optional():
         ax.legend()
 
     axes[0].set_ylabel("Total energy")
-    fig.suptitle("Optional: Total energy vs time for increasing dt")
+    fig.suptitle("Total energy vs time for different dt")
     fig.tight_layout()
-    fig.savefig("optional_energy_stability.png", dpi=300, bbox_inches="tight")
+    fig.savefig("optional.png", dpi=300, bbox_inches="tight")
     plt.show()
 
 
