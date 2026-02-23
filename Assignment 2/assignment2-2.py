@@ -32,7 +32,7 @@ def get_new_location(location, N):
     directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
     direction = directions[np.random.randint(4)]
     dy, dx = direction
-    print(direction)
+    # print(direction)
 
     new_y = y + dy
     new_x = x + dx
@@ -52,7 +52,7 @@ def get_new_location(location, N):
 
 def single_walker(c: np.ndarray, N:int) -> np.ndarray:
     # Generate walker on random point at the top of the grid
-    location = (0, np.random.randint(0, N - 1))
+    location = (0, np.random.randint(0, N))
     c[location] = 1
 
     while c[location] != 2:
@@ -65,6 +65,7 @@ def single_walker(c: np.ndarray, N:int) -> np.ndarray:
         if 2 in neighbour_val:
             c[location] = 2
             print("walker is now part of cluster")
+            print(c)
             break
         
         location = get_new_location(location, N)
@@ -83,10 +84,10 @@ def main():
     args = parse_args()
     option = args.option
 
-    # np.random.seed(0)
+    np.random.seed(0)
 
     # Grid size
-    N = 10
+    N = 100
 
     # Create the grid
     c = np.zeros((N, N))
@@ -94,11 +95,20 @@ def main():
     # Initial stationary point at the bottom of the grid
     c[-1, int(N/2)] = 2
 
-    print(c)
+    # print(c)
 
     if option == "C":
-        c = single_walker(c, N)
-        print(c)
+        walker = 0
+        first_row = c[0,]
+
+        while 0 in first_row:
+            print(f"Walker n: {walker}")
+            c = single_walker(c, N)
+            # print(c)
+            first_row = c[0,]
+            walker += 1
+
+        
 
     elif option == "D":
         print("Running code for part D")
