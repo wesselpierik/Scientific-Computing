@@ -64,14 +64,14 @@ def single_walker(c: np.ndarray, N:int) -> np.ndarray:
 
         if 2 in neighbour_val:
             c[location] = 2
-            print("walker is now part of cluster")
-            print(c)
+            # print("walker is now part of cluster")
+            # print(c)
             break
         
         location = get_new_location(location, N)
         
         if location is None:
-            print("Remove walker")
+            # print("Remove walker")
             return c
         else:
             c[location] = 1
@@ -102,16 +102,23 @@ def main():
         first_row = c[0,]
 
         while 0 in first_row:
-            print(f"Walker n: {walker}")
-            c = single_walker(c, N)
-            # print(c)
-            first_row = c[0,]
             walker += 1
+            if walker % 1000 == 0: 
+                print(f"Random walker number {walker}")
+                
+            c = single_walker(c, N)
+            first_row = c[0,]
 
+        # Show final cluster
+        plt.imshow(c)
+        plt.title(f"Final cluster after {walker} random walkers")
+        plt.xlabel("x")
+        plt.ylabel("y")
+        plt.show()
         
 
     elif option == "D":
-        print("Running code for part D")
+        print("Part D")
 
 if __name__ == "__main__":
     main()
