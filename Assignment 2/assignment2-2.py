@@ -16,67 +16,39 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 def get_neighbours(c: np.ndarray, N:int, location):
-    if location[0] == 0:
-        top = 0
-        bottom = c[location[0] + 1, location[1]]
-        right = c[location[0], location[1] + 1]
-        left = c[location[0], location[1] - 1]
+    y, x = location
 
-    elif location[0] == N - 1:
-        top = c[location[0] - 1, location[1]]
-        bottom = 0
-        right = c[location[0], location[1] + 1]
-        left = c[location[0], location[1] - 1]
-
-    elif location[1] == 0:
-        top = c[location[0] - 1, location[1]]
-        bottom = c[location[0] + 1, location[1]]
-        right = c[location[0], location[1] + 1]
-        left = 0
-
-    elif location[1] == N - 1:
-        top = c[location[0] - 1, location[1]]
-        bottom = c[location[0] + 1, location[1]]
-        right = c[location[0], 0]
-        left = c[location[0], location[1] - 1]
-
-    else:
-        top = c[location[0] - 1, location[1]]
-        bottom = c[location[0] + 1, location[1]]
-        right = c[location[0], location[1] + 1]
-        left = c[location[0], location[1] - 1]
+    top = c[y - 1, x] if y > 0 else 0
+    bottom = c[y + 1, x] if y < N - 1 else 0
+    left = c[y, x - 1] if x > 0 else 0
+    right = c[y, x + 1] if x < N - 1 else 0
 
     return int(top), int(bottom), int(right), int(left)
 
 def get_new_location(location, N):
-    neighbour = np.random.choice(["top", "bottom", "left", "right"])
-    print(neighbour)
+    y, x = location
 
-    if neighbour == "top":
-        if location[0] == 0:
-            return None            
-        else:
-            location = (location[0] - 1, location[1])
+    # Select random direction
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    direction = directions[np.random.randint(4)]
+    dy, dx = direction
+    print(direction)
 
-    elif neighbour == "bottom":
-        if location[0] == N - 1:
-            return None
-        else:
-            location = (location[0] + 1, location[1])
-    
-    elif neighbour == "left":
-        if location[1] == 0:
-            location = (location[0], N - 1)
-        else:
-            location = (location[0], location[1] - 1)
+    new_y = y + dy
+    new_x = x + dx
 
-    else:
-        if location[1] == N - 1:
-            location = (location[0], 0)
-        else:
-            location = (location[0], location[1] + 1)
+    if new_y < 0 or new_y > N - 1:
+        return None
 
-    return location
+    elif new_x < 0:
+        new_x = N - 1
+
+    elif new_x > N - 1:
+        new_x = 0
+
+    new_location = (new_y, new_x)
+
+    return new_location
 
 def single_walker(c: np.ndarray, N:int) -> np.ndarray:
     # Generate walker on random point at the top of the grid
