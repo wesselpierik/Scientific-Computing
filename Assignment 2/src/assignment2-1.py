@@ -17,17 +17,23 @@ local_dir = Path(__file__).parent
 
 def plot_omega() -> None:
     """Plot the influence of optimizing omega for the SOR solver."""
+    start_iterations = 300
     grid_size = 100
     iterations = 50
     epsilon = 1e-8
     max_steps = 100000
     all_steps = []
     all_omega = np.linspace(1.75, 2, 20)
+
+    start_grid = dla.DLA(grid_size, eta=1, omega=1.95)
+    for _ in tqdm(range(start_iterations)):
+        start_grid.step()
     for omega in tqdm(all_omega):
         grid = dla.DLA(grid_size, eta=1, omega=omega)
-        steps = 0
-        while steps < max_steps and grid.step_nutrients() > epsilon:
-            steps += 1
+        grid._growths = start_grid._growths.copy()  # noqa: SLF001
+        grid._nutrients = start_grid._nutrients.copy()  # noqa: SLF001
+        grid._candidate_array = start_grid._candidate_array.copy()  # noqa: SLF001
+        grid._candidate_list = list(start_grid._candidate_list)  # noqa: SLF001
         steps = 0
         for _ in range(iterations):
             while steps < max_steps and grid.step_nutrients() > epsilon:
@@ -36,10 +42,74 @@ def plot_omega() -> None:
         all_steps.append(steps)
     fig = plt.figure()
     axes = fig.subplots(ncols=1)
-    axes.set_title("Step count with SOR scheme")
+    axes.set_title("Step count SOR for iterations 300-350")
     axes.set_xlabel(r"$\omega$")
     axes.set_ylabel("Steps")
     axes.plot(all_omega, all_steps)
+    plt.show()
+
+
+def plot_eta_path() -> None:
+    """Plot the influence of choosing a higher or lower eta value."""
+    grid_size = 100
+    fig = plt.figure()
+    axes = fig.subplots(ncols=3)
+
+    axis: Axes = axes[0]
+    axis.set_xticks([])
+    axis.set_yticks([])
+    axis.set_title(r"Growth path with $\eta = 0$")
+
+    axis = axes[1]
+    axis.set_xticks([])
+    axis.set_yticks([])
+    axis.set_title(r"Growth path with $\eta = 1$")
+
+    axis = axes[2]
+    axis.set_xticks([])
+    axis.set_yticks([])
+    axis.set_title(r"Growth path with $\eta = 2$")
+
+    path = np.zeros((3, grid_size, grid_size))
+
+    cached_path = local_dir / "eta_time_data.npy"
+    if cached_path.exists():
+        cached = np.load(cached_path)
+        for i, avg in enumerate(cached):
+            axes[i].imshow(avg, vmin=0, vmax=1)
+    else:
+        for i, eta in enumerate(np.linspace(0, 2, 3)):
+            runs = 10
+            for j in range(runs):
+                grid = dla.DLA(
+                    grid_size,
+                    eta,
+                    epsilon=1e-5,
+                    workers=1,
+                    seed=j,
+                    omega=1.9,
+                )
+                iterations = 1000
+                for iteration in tqdm(range(iterations)):
+                    grid.step()
+                    path[i] = np.maximum(
+                        path[i],
+                        grid.growths * (1 - iteration / iterations),
+                    )
+            axes[i].imshow(path[i], vmin=0, vmax=10)
+        np.save(cached_path, path)
+
+    # Add a single colorbar with legend labels
+    cbar = fig.colorbar(
+        axes[1].images[0],
+        ax=axes,
+        orientation="horizontal",
+        pad=0.1,
+        aspect=30,
+    )
+    cbar.ax.set_xticks([1, 0])
+    cbar.ax.set_xticklabels(["Start", "End"])
+
     plt.show()
 
 
@@ -70,7 +140,7 @@ def plot_eta() -> None:
     if cached_path.exists():
         cached = np.load(cached_path)
         for i, avg in enumerate(cached):
-            axes[i].imshow(avg)
+            axes[i].imshow(avg, vmin=0, vmax=10)
     else:
         for i, eta in enumerate(np.linspace(0, 2, 3)):
             runs = 10
@@ -81,14 +151,26 @@ def plot_eta() -> None:
                     epsilon=1e-5,
                     workers=1,
                     seed=j,
-                    omega=1.8,
+                    omega=1.9,
                 )
                 iterations = 1000
                 for _ in tqdm(range(iterations)):
                     grid.step()
                 avg[i] += grid.growths
-            axes[i].imshow(avg[i])
+            axes[i].imshow(avg[i], vmin=0, vmax=10)
         np.save(cached_path, avg)
+
+    # Add a single colorbar with legend labels
+    cbar = fig.colorbar(
+        axes[1].images[0],
+        ax=axes,
+        orientation="horizontal",
+        pad=0.1,
+        aspect=30,
+    )
+    cbar.ax.set_xticks([10, 0])
+    cbar.ax.set_xticklabels(["Always reached", "Never reached"])
+
     plt.show()
 
 
@@ -153,7 +235,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "assignment",
         help="The part of the assignment to plot",
-        choices=["omega", "eta", "gather_small"],
+        choices=["omega", "eta", "eta_path", "gather_small"],
     )
     return parser.parse_args()
 
@@ -165,6 +247,8 @@ def main() -> None:
         plot_omega()
     elif assignment == "eta":
         plot_eta()
+    elif assignment == "eta_path":
+        plot_eta_path()
     elif assignment == "gather_small":
         gather_small()
 
