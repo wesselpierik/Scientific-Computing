@@ -21,7 +21,7 @@ from matplotlib.image import AxesImage
 from numba import njit, prange
 
 
-@njit(cache=True, parallel=True)
+@njit(cache=True, parallel=False)
 def _step_nutrients(
     nutrients: npt.NDArray,
     growths: npt.NDArray,

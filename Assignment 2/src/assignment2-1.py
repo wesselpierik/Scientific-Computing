@@ -180,14 +180,37 @@ def gather_small() -> None:
     Due to the simplicity of this function, it requires some hardcoding to
     try out different DLA configurations
     """
-    data_path = local_dir / "small_data.csv"
+    data_path = local_dir / "no_mp.csv"
     grid_size = 100
     epsilon = 1e-8
     steps = 100
     iterations = 100
     latencies = []
     for i in tqdm(range(iterations)):
-        grid = dla.DLA(grid_size, 1, epsilon=epsilon, omega=1.9, seed=i, workers=1)
+        grid = dla.DLA(grid_size, 1, epsilon=epsilon, omega=1.95, seed=i, workers=1)
+        begin_time = time.time()
+        for _ in range(steps):
+            grid.step()
+        latencies.append([time.time() - begin_time])
+    with data_path.open("w") as f:
+        writer = csv.writer(f)
+        writer.writerows(latencies)
+
+
+def gather_large() -> None:
+    """Gather the time it takes for the grid to complete 100 steps.
+
+    Due to the simplicity of this function, it requires some hardcoding to
+    try out different DLA configurations
+    """
+    data_path = local_dir / "manual_mp_large.csv"
+    grid_size = 1000
+    epsilon = 1e-6
+    steps = 100
+    iterations = 10
+    latencies = []
+    for i in tqdm(range(iterations)):
+        grid = dla.DLA(grid_size, 1, epsilon=epsilon, omega=1.96, seed=i, workers=16)
         begin_time = time.time()
         for _ in range(steps):
             grid.step()
@@ -222,12 +245,106 @@ def plot_small() -> None:
         manual_mp_std = np.std(data)
 
     # Plotting
-    fig = plt.figure()
+    fig = plt.figure(figsize=(12, 6))
     axes = fig.subplots(ncols=1)
     labels = ["Control", "Multiprocessing", "Numba"]
     means = [no_mp_mean, manual_mp_mean, numba_mp_mean]
-    axes.bar(labels, means)
-    # TODO: Error bars
+    stds = [no_mp_std, manual_mp_std, numba_mp_std]
+
+    # Create bar chart with nice colors
+    colors = ["#FF6B6B", "#4ECDC4", "#45B7D1"]
+    axes.bar(labels, means, color=colors, alpha=0.8, edgecolor="black", linewidth=1.5)
+
+    # Add error bars
+    axes.errorbar(
+        labels,
+        means,
+        stds,
+        fmt="none",
+        ecolor="black",
+        capsize=5,
+        capthick=2,
+        elinewidth=2,
+    )
+
+    # Styling
+    axes.grid(axis="y", alpha=0.3, linestyle="--")
+    axes.set_title(
+        "Average computation time for 100 DLA steps",
+        fontsize=14,
+    )
+    axes.set_ylabel("Time (seconds)", fontsize=12)
+
+    # Add background color
+    axes.set_facecolor("#F8F9FA")
+    fig.patch.set_facecolor("white")
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_large() -> None:
+    """Plot the time data from the gather_small function.
+
+    Requires the no_mp_large.csv, numba_mp_large.csv and manual_mp_large.csv to be
+    present.
+    """
+    # Data reading
+    with (local_dir / "no_mp_large.csv").open("r") as f:
+        reader = csv.reader(f)
+        data = [float(x[0]) for x in reader]
+        no_mp_mean = np.mean(data)
+        no_mp_std = np.std(data)
+
+    with (local_dir / "numba_mp_large.csv").open("r") as f:
+        reader = csv.reader(f)
+        data = [float(x[0]) for x in reader]
+        numba_mp_mean = np.mean(data)
+        numba_mp_std = np.std(data)
+
+    with (local_dir / "manual_mp_large.csv").open("r") as f:
+        reader = csv.reader(f)
+        data = [float(x[0]) for x in reader]
+        manual_mp_mean = np.mean(data)
+        manual_mp_std = np.std(data)
+
+    # Plotting
+    fig = plt.figure(figsize=(12, 6))
+    axes = fig.subplots(ncols=1)
+    labels = ["Control", "Multiprocessing", "Numba"]
+    means = [no_mp_mean, manual_mp_mean, numba_mp_mean]
+    stds = [no_mp_std, manual_mp_std, numba_mp_std]
+
+    # Create bar chart with nice colors
+    colors = ["#FF6B6B", "#4ECDC4", "#45B7D1"]
+    axes.bar(labels, means, color=colors, alpha=0.8, edgecolor="black", linewidth=1.5)
+
+    # Add error bars
+    axes.errorbar(
+        labels,
+        means,
+        stds,
+        fmt="none",
+        ecolor="black",
+        capsize=5,
+        capthick=2,
+        elinewidth=2,
+    )
+
+    # Styling
+    axes.grid(axis="y", alpha=0.3, linestyle="--")
+    axes.set_title(
+        "Average computation time for 100 DLA steps",
+        fontsize=14,
+    )
+    axes.set_ylabel("Time (seconds)", fontsize=12)
+
+    # Add background color
+    axes.set_facecolor("#F8F9FA")
+    fig.patch.set_facecolor("white")
+
+    plt.tight_layout()
+    plt.show()
 
 
 def parse_args() -> argparse.Namespace:
@@ -235,7 +352,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "assignment",
         help="The part of the assignment to plot",
-        choices=["omega", "eta", "eta_path", "gather_small"],
+        choices=[
+            "omega",
+            "eta",
+            "eta_path",
+            "gather_small",
+            "gather_large",
+            "plot_small",
+            "plot_large",
+        ],
     )
     return parser.parse_args()
 
@@ -251,6 +376,12 @@ def main() -> None:
         plot_eta_path()
     elif assignment == "gather_small":
         gather_small()
+    elif assignment == "gather_large":
+        gather_large()
+    elif assignment == "plot_small":
+        plot_small()
+    elif assignment == "plot_large":
+        plot_large()
 
 
 if __name__ == "__main__":
