@@ -173,6 +173,7 @@ def main():
         p_s = np.array([0.4, 0.6, 0.8, 1.0])
         # p_s = np.array([0.2, 1.0])
         c_sticking_prob = []
+        tot_cluster_members = []
 
         for p in range(len(p_s)):
             # Create the grid
@@ -187,6 +188,7 @@ def main():
                     
                 c = single_walker_stick(c, N, p_s[p])
 
+            tot_cluster_members.append(np.sum(c) / 2)
             c_sticking_prob.append(c)
 
         # Show final clusters
@@ -212,7 +214,7 @@ def main():
         for ax in axs.ravel():
             ax.set_xlabel("x")
             ax.set_ylabel("y")
-            
+
         # for i in range(len(p_s)):
         #     ax = axs[i]
         #     ax.imshow(c_sticking_prob[i])
@@ -221,6 +223,12 @@ def main():
         #     ax.set_ylabel("y")
         plt.show()
 
+        plt.figure()
+        plt.plot(p_s, tot_cluster_members)
+        plt.grid(True)
+        plt.xlabel(r"Sticking probability $p_s$")
+        plt.ylabel("Final cluster size")
+        plt.show()
 
 
 if __name__ == "__main__":
