@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-@numba.njit
+# @numba.njit
 def get_neighbours(c: np.ndarray, N:int, location):
     y, x = location
 
@@ -27,7 +27,7 @@ def get_neighbours(c: np.ndarray, N:int, location):
 
     return int(top), int(bottom), int(right), int(left)
 
-@numba.njit
+# @numba.njit
 def get_new_location(location, N, neighbour_val=None):
     y, x = location
     directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
@@ -47,6 +47,8 @@ def get_new_location(location, N, neighbour_val=None):
             # print(f"get new direction, {random_direction}, {neighbour_val[random_direction]}")
             random_direction = np.random.randint(4)
 
+        direction = directions[random_direction]
+        dy, dx = direction
         new_y = y + dy
         new_x = x + dx
 
@@ -111,8 +113,9 @@ def single_walker_stick(c:np.ndarray, N:int, p_s:float) -> np.ndarray:
                 break
             else:
                 location = get_new_location(location, N, neighbour_val)
-        
-        location = get_new_location(location, N)
+
+        else:
+            location = get_new_location(location, N)
         
         if location is None:
             # print("Remove walker")
@@ -167,7 +170,7 @@ def main():
 
     elif option == "D":
         print("Part D")
-        p_s = np.array([0.2, 0.4, 0.6, 0.8, 1.0])
+        p_s = np.array([0.4, 0.6, 0.8, 1.0])
         # p_s = np.array([0.2, 1.0])
         c_sticking_prob = []
 
@@ -187,15 +190,35 @@ def main():
             c_sticking_prob.append(c)
 
         # Show final clusters
-        fig, axs = plt.subplots(nrows=1, ncols=len(p_s), layout='constrained')
+        fig, axs = plt.subplots(nrows=2, ncols=2, layout='constrained')
         fig.suptitle(f"Final clusters after {walker + 1} random walkers, for different sticking probabilities")
         
-        for i in range(len(p_s)):
-            ax = axs[i]
-            ax.imshow(c_sticking_prob[i])
-            ax.set_title(f"Sticking probability = {p_s[i]}")
+        ax = axs[0,0]
+        ax.imshow(c_sticking_prob[0])
+        ax.set_title(f"Sticking probability = {p_s[0]}")
+
+        ax = axs[0,1]
+        ax.imshow(c_sticking_prob[1])
+        ax.set_title(f"Sticking probability = {p_s[1]}")
+
+        ax = axs[1,0]
+        ax.imshow(c_sticking_prob[2])
+        ax.set_title(f"Sticking probability = {p_s[2]}")
+
+        ax = axs[1,1]
+        ax.imshow(c_sticking_prob[3])
+        ax.set_title(f"Sticking probability = {p_s[3]}")
+
+        for ax in axs.ravel():
             ax.set_xlabel("x")
             ax.set_ylabel("y")
+            
+        # for i in range(len(p_s)):
+        #     ax = axs[i]
+        #     ax.imshow(c_sticking_prob[i])
+        #     ax.set_title(f"Sticking probability = {p_s[i]}")
+        #     ax.set_xlabel("x")
+        #     ax.set_ylabel("y")
         plt.show()
 
 
