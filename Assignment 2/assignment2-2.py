@@ -133,18 +133,15 @@ def main():
     # Grid size
     N = 100
 
-    # Create the grid
-    c = np.zeros((N, N))
-
-    # Initial stationary point at the bottom of the grid
-    c[-1, int(N/2)] = 2
-
-    # print(c)
-
     if option == "C":
-        walker = 0
-        first_row = c[0,]
+        # Create the grid
+        c = np.zeros((N, N))
 
+        # Initial stationary point at the bottom of the grid
+        c[-1, int(N/2)] = 2
+
+        # first_row = c[0,]
+        # walker = 0
         # while 0 in first_row:
         #     walker += 1
         #     if walker % 5000 == 0: 
@@ -170,32 +167,38 @@ def main():
 
     elif option == "D":
         print("Part D")
-        p_s = 1
+        p_s = np.array([0.2, 0.4, 0.6, 0.8, 1.0])
+        # p_s = np.array([0.2, 1.0])
+        c_sticking_prob = []
 
-        walker = 0
-        first_row = c[0,]
+        for p in range(len(p_s)):
+            # Create the grid
+            c = np.zeros((N, N))
 
-        # while 0 in first_row:
-        #     walker += 1
-        #     if walker % 5000 == 0: 
-        #         print(f"Random walker number {walker + 1}")
-                
-        #     c = single_walker_stick(c, N, p_s)
-        #     first_row = c[0,]
+            # Initial stationary point at the bottom of the grid
+            c[-1, int(N/2)] = 2
+
+            for walker in range(65000):
+                if walker % 5000 == 0: 
+                    print(f"Random walker number {walker}")
+                    
+                c = single_walker_stick(c, N, p_s[p])
+
+            c_sticking_prob.append(c)
+
+        # Show final clusters
+        fig, axs = plt.subplots(nrows=1, ncols=len(p_s), layout='constrained')
+        fig.suptitle(f"Final clusters after {walker + 1} random walkers, for different sticking probabilities")
         
-        for walker in range(65000):
-            if walker % 5000 == 0: 
-                print(f"Random walker number {walker}")
-                
-            c = single_walker(c, N)
-            first_row = c[0,]
-
-        # Show final cluster
-        plt.imshow(c)
-        plt.title(f"Final cluster after {walker + 1} random walkers")
-        plt.xlabel("x")
-        plt.ylabel("y")
+        for i in range(len(p_s)):
+            ax = axs[i]
+            ax.imshow(c_sticking_prob[i])
+            ax.set_title(f"Sticking probability = {p_s[i]}")
+            ax.set_xlabel("x")
+            ax.set_ylabel("y")
         plt.show()
+
+
 
 if __name__ == "__main__":
     main()
