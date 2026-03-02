@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import argparse
+import numba
 
 def parse_args() -> argparse.Namespace:
     """Function to parse the command line arguments.
@@ -15,6 +16,7 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
+@numba.njit
 def get_neighbours(c: np.ndarray, N:int, location):
     y, x = location
 
@@ -25,17 +27,28 @@ def get_neighbours(c: np.ndarray, N:int, location):
 
     return int(top), int(bottom), int(right), int(left)
 
-def get_new_location(location, N):
+@numba.njit
+def get_new_location(location, N, neighbour_val=None):
     y, x = location
-
-    # Select random direction
     directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-    direction = directions[np.random.randint(4)]
-    dy, dx = direction
-    # print(direction)
+    random_direction = np.random.randint(4)
 
-    new_y = y + dy
-    new_x = x + dx
+    if neighbour_val is None:
+        # Select random direction
+        direction = directions[random_direction]
+        dy, dx = direction
+        # print(direction)
+
+        new_y = y + dy
+        new_x = x + dx
+
+    else:
+        while neighbour_val[random_direction] == 2:
+            # print(f"get new direction, {random_direction}, {neighbour_val[random_direction]}")
+            random_direction = np.random.randint(4)
+
+        new_y = y + dy
+        new_x = x + dx
 
     if new_y < 0 or new_y > N - 1:
         return None
@@ -50,7 +63,7 @@ def get_new_location(location, N):
 
     return new_location
 
-def single_walker(c: np.ndarray, N:int) -> np.ndarray:
+def single_walker(c:np.ndarray, N:int) -> np.ndarray:
     # Generate walker on random point at the top of the grid
     location = (0, np.random.randint(0, N))
     c[location] = 1
@@ -67,6 +80,37 @@ def single_walker(c: np.ndarray, N:int) -> np.ndarray:
             # print("walker is now part of cluster")
             # print(c)
             break
+        
+        location = get_new_location(location, N)
+        
+        if location is None:
+            # print("Remove walker")
+            return c
+        else:
+            c[location] = 1
+
+    return c
+
+def single_walker_stick(c:np.ndarray, N:int, p_s:float) -> np.ndarray:
+    # Generate walker on random point at the top of the grid
+    location = (0, np.random.randint(0, N))
+    c[location] = 1
+
+    while c[location] != 2:
+        c[location] = 0
+
+        # Get values of neighbours
+        neighbour_val = get_neighbours(c, N, location)
+        # print(neighbour_val)
+
+        if 2 in neighbour_val:
+            if np.random.rand() <= p_s:
+                c[location] = 2
+                # print("walker is now part of cluster")
+                # print(c)
+                break
+            else:
+                location = get_new_location(location, N, neighbour_val)
         
         location = get_new_location(location, N)
         
@@ -103,7 +147,7 @@ def main():
 
         while 0 in first_row:
             walker += 1
-            if walker % 1000 == 0: 
+            if walker % 5000 == 0: 
                 print(f"Random walker number {walker}")
                 
             c = single_walker(c, N)
@@ -119,6 +163,25 @@ def main():
 
     elif option == "D":
         print("Part D")
+        p_s = 0.9
+
+        walker = 0
+        first_row = c[0,]
+
+        while 0 in first_row:
+            walker += 1
+            if walker % 5000 == 0: 
+                print(f"Random walker number {walker}")
+                
+            c = single_walker_stick(c, N, p_s)
+            first_row = c[0,]
+
+        # Show final cluster
+        plt.imshow(c)
+        plt.title(f"Final cluster after {walker} random walkers")
+        plt.xlabel("x")
+        plt.ylabel("y")
+        plt.show()
 
 if __name__ == "__main__":
     main()
