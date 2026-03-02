@@ -145,8 +145,15 @@ def main():
         walker = 0
         first_row = c[0,]
 
-        while 0 in first_row:
-            walker += 1
+        # while 0 in first_row:
+        #     walker += 1
+        #     if walker % 5000 == 0: 
+        #         print(f"Random walker number {walker + 1}")
+                
+        #     c = single_walker(c, N)
+        #     first_row = c[0,]
+
+        for walker in range(65000):
             if walker % 5000 == 0: 
                 print(f"Random walker number {walker}")
                 
@@ -155,7 +162,7 @@ def main():
 
         # Show final cluster
         plt.imshow(c)
-        plt.title(f"Final cluster after {walker} random walkers")
+        plt.title(f"Final cluster after {walker + 1} random walkers")
         plt.xlabel("x")
         plt.ylabel("y")
         plt.show()
@@ -163,22 +170,29 @@ def main():
 
     elif option == "D":
         print("Part D")
-        p_s = 0.9
+        p_s = 1
 
         walker = 0
         first_row = c[0,]
 
-        while 0 in first_row:
-            walker += 1
+        # while 0 in first_row:
+        #     walker += 1
+        #     if walker % 5000 == 0: 
+        #         print(f"Random walker number {walker + 1}")
+                
+        #     c = single_walker_stick(c, N, p_s)
+        #     first_row = c[0,]
+        
+        for walker in range(65000):
             if walker % 5000 == 0: 
                 print(f"Random walker number {walker}")
                 
-            c = single_walker_stick(c, N, p_s)
+            c = single_walker(c, N)
             first_row = c[0,]
 
         # Show final cluster
         plt.imshow(c)
-        plt.title(f"Final cluster after {walker} random walkers")
+        plt.title(f"Final cluster after {walker + 1} random walkers")
         plt.xlabel("x")
         plt.ylabel("y")
         plt.show()
