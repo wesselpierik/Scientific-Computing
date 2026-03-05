@@ -5,7 +5,10 @@ Course:       Scientific Computing
 
 Description:
 -----------
-TODO:
+Logic for the simulation of Diffusion Limited Aggregation using steady state of
+diffusing nutrients. The simulation is wrapped in the DLA class, allowing for
+easy stepping of the growth using either a single-threaded, numba multithreaded or
+multiprocessed implementation.
 """
 
 import multiprocessing as mp
@@ -41,6 +44,10 @@ def _step_nutrients_serial(
             Modified in-place with new iteration results.
         growths: Boolean mask of absorbing sink regions.
         omega: Relaxation parameter for acceleration/deceleration.
+        first_row: The index of the first row to update.
+        last_row: The index of the last row to update.
+        first_column: The index of the first column to update.
+        last_column: The index of the last column to update.
 
     Returns:
         Maximum absolute change between old and new values across the grid.
@@ -97,10 +104,6 @@ def _step_nutrients_parallel(
     nutrients: npt.NDArray,
     growths: npt.NDArray,
     omega: float,
-    first_row: int,
-    last_row: int,
-    first_column: int,
-    last_column: int,
 ) -> float:
     """Compute one SOR iteration step on the grid (JIT-compiled, parallel version).
 
@@ -124,8 +127,11 @@ def _step_nutrients_parallel(
     """
     max_diff = 0.0
     grid_size = nutrients.shape[0]
-    first_last_row = last_row if last_row == grid_size - 1 else last_row + 1
-    for row in prange(first_row, first_last_row):
+    first_row = 1
+    last_row = grid_size - 1
+    first_column = 0
+    last_column = grid_size - 1
+    for row in prange(first_row, last_row):
         for column in prange(first_column, last_column + 1):
             if growths[row, column]:
                 continue
@@ -144,22 +150,21 @@ def _step_nutrients_parallel(
 
             nutrients[row, column] = new
 
-    if last_row == grid_size - 1:
-        for column in prange(first_column, last_column + 1):
-            if growths[last_row, column]:
-                continue
+    for column in prange(first_column, last_column + 1):
+        if growths[last_row, column]:
+            continue
 
-            up = nutrients[last_row - 1, column]
-            left = nutrients[last_row, column - 1]
-            right = nutrients[last_row, (column + 1) % grid_size]
-            current = nutrients[last_row, column]
+        up = nutrients[last_row - 1, column]
+        left = nutrients[last_row, column - 1]
+        right = nutrients[last_row, (column + 1) % grid_size]
+        current = nutrients[last_row, column]
 
-            new = 1 / 3 * omega * (up + left + right) + (1 - omega) * current
+        new = 1 / 3 * omega * (up + left + right) + (1 - omega) * current
 
-            diff = abs(current - new)
-            max_diff = max(max_diff, diff)
+        diff = abs(current - new)
+        max_diff = max(max_diff, diff)
 
-            nutrients[last_row, column] = new
+        nutrients[last_row, column] = new
     return max_diff
 
 
@@ -184,10 +189,6 @@ def _step_nutrients(
             nutrients,
             growths,
             omega,
-            first_row,
-            last_row,
-            first_column,
-            last_column,
         )
     return _step_nutrients_serial(
         nutrients,
