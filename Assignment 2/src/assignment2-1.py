@@ -14,10 +14,40 @@ if TYPE_CHECKING:
 
 local_dir = Path(__file__).parent
 
+parallelization = None
+
+
+def create_dla(
+    grid_size: int,
+    eta: float,
+    omega: float,
+    epsilon: float,
+    seed: int = 43,
+) -> dla.DLA:
+    if parallelization == "numba":
+        return dla.DLA(
+            grid_size,
+            eta,
+            omega=omega,
+            epsilon=epsilon,
+            seed=seed,
+            numba_parallel=True,
+        )
+    if parallelization == "manual":
+        return dla.DLA(
+            grid_size,
+            eta,
+            omega=omega,
+            epsilon=epsilon,
+            seed=seed,
+            workers=16,
+        )
+    return dla.DLA(grid_size, eta, omega=omega, epsilon=epsilon, seed=seed)
+
 
 def plot_omega() -> None:
     """Plot the influence of optimizing omega for the SOR solver."""
-    start_iterations = 300
+    start_iterations = 1000
     grid_size = 100
     iterations = 50
     epsilon = 1e-8
@@ -25,11 +55,11 @@ def plot_omega() -> None:
     all_steps = []
     all_omega = np.linspace(1.75, 2, 20)
 
-    start_grid = dla.DLA(grid_size, eta=1, omega=1.95)
+    start_grid = create_dla(grid_size, 1, 1.95, epsilon)
     for _ in tqdm(range(start_iterations)):
         start_grid.step()
     for omega in tqdm(all_omega):
-        grid = dla.DLA(grid_size, eta=1, omega=omega)
+        grid = create_dla(grid_size, 1, omega, epsilon)
         grid._growths = start_grid._growths.copy()  # noqa: SLF001
         grid._nutrients = start_grid._nutrients.copy()  # noqa: SLF001
         grid._candidate_array = start_grid._candidate_array.copy()  # noqa: SLF001
@@ -81,14 +111,7 @@ def plot_eta_path() -> None:
         for i, eta in enumerate(np.linspace(0, 2, 3)):
             runs = 10
             for j in range(runs):
-                grid = dla.DLA(
-                    grid_size,
-                    eta,
-                    epsilon=1e-5,
-                    workers=1,
-                    seed=j,
-                    omega=1.9,
-                )
+                grid = create_dla(grid_size, eta, 1.9, 1e-5, j)
                 iterations = 1000
                 for iteration in tqdm(range(iterations)):
                     grid.step()
@@ -145,14 +168,7 @@ def plot_eta() -> None:
         for i, eta in enumerate(np.linspace(0, 2, 3)):
             runs = 10
             for j in range(runs):
-                grid = dla.DLA(
-                    grid_size,
-                    eta,
-                    epsilon=1e-5,
-                    workers=1,
-                    seed=j,
-                    omega=1.9,
-                )
+                grid = create_dla(grid_size, eta, 1.9, 1e-5, j)
                 iterations = 1000
                 for _ in tqdm(range(iterations)):
                     grid.step()
@@ -187,7 +203,7 @@ def gather_small() -> None:
     iterations = 100
     latencies = []
     for i in tqdm(range(iterations)):
-        grid = dla.DLA(grid_size, 1, epsilon=epsilon, omega=1.95, seed=i, workers=1)
+        grid = create_dla(grid_size, 1, 1.95, epsilon, i)
         begin_time = time.time()
         for _ in range(steps):
             grid.step()
@@ -210,7 +226,7 @@ def gather_large() -> None:
     iterations = 10
     latencies = []
     for i in tqdm(range(iterations)):
-        grid = dla.DLA(grid_size, 1, epsilon=epsilon, omega=1.96, seed=i, workers=16)
+        grid = create_dla(grid_size, 1, 1.96, epsilon, i)
         begin_time = time.time()
         for _ in range(steps):
             grid.step()
@@ -362,11 +378,19 @@ def parse_args() -> argparse.Namespace:
             "plot_large",
         ],
     )
+    parser.add_argument(
+        "parallelization",
+        help="Which type of parallelization is applied",
+        choices=["none", "numba", "manual"],
+    )
     return parser.parse_args()
 
 
 def main() -> None:
+    global parallelization  # noqa: PLW0603
+
     args = parse_args()
+    parallelization = args.parallelization
     assignment = args.assignment
     if assignment == "omega":
         plot_omega()

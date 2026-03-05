@@ -22,7 +22,7 @@ from numba import njit, prange
 
 
 @njit(cache=True, parallel=False)
-def _step_nutrients(
+def _step_nutrients_serial(
     nutrients: npt.NDArray,
     growths: npt.NDArray,
     omega: float,
@@ -31,7 +31,78 @@ def _step_nutrients(
     first_column: int,
     last_column: int,
 ) -> float:
-    """Compute one SOR iteration step on the grid (JIT-compiled).
+    """Compute one SOR iteration step on the grid (JIT-compiled, serial version).
+
+    Updates each non-growth interior point as a weighted combination of its
+    current value and the Gauss-Seidel update. Operates in-place on state.
+
+    Args:
+        nutrients: Current nutrient concentration grid values.
+            Modified in-place with new iteration results.
+        growths: Boolean mask of absorbing sink regions.
+        omega: Relaxation parameter for acceleration/deceleration.
+
+    Returns:
+        Maximum absolute change between old and new values across the grid.
+
+    Note:
+        - Uses periodic boundary conditions (horizontal wrapping).
+        - Skips updates for sink regions (value stays 0).
+        - Modifies state array in-place.
+
+    """
+    max_diff = 0.0
+    grid_size = nutrients.shape[0]
+    first_last_row = last_row if last_row == grid_size - 1 else last_row + 1
+    for row in range(first_row, first_last_row):
+        for column in range(first_column, last_column + 1):
+            if growths[row, column]:
+                continue
+
+            up = nutrients[row - 1, column]
+            left = nutrients[row, column - 1]
+            right = nutrients[row, (column + 1) % grid_size]
+            current = nutrients[row, column]
+
+            down = nutrients[row + 1, column]
+
+            new = 0.25 * omega * (up + down + left + right) + (1 - omega) * current
+
+            diff = abs(current - new)
+            max_diff = max(max_diff, diff)
+
+            nutrients[row, column] = new
+
+    if last_row == grid_size - 1:
+        for column in range(first_column, last_column + 1):
+            if growths[last_row, column]:
+                continue
+
+            up = nutrients[last_row - 1, column]
+            left = nutrients[last_row, column - 1]
+            right = nutrients[last_row, (column + 1) % grid_size]
+            current = nutrients[last_row, column]
+
+            new = 1 / 3 * omega * (up + left + right) + (1 - omega) * current
+
+            diff = abs(current - new)
+            max_diff = max(max_diff, diff)
+
+            nutrients[last_row, column] = new
+    return max_diff
+
+
+@njit(cache=True, parallel=True)
+def _step_nutrients_parallel(
+    nutrients: npt.NDArray,
+    growths: npt.NDArray,
+    omega: float,
+    first_row: int,
+    last_row: int,
+    first_column: int,
+    last_column: int,
+) -> float:
+    """Compute one SOR iteration step on the grid (JIT-compiled, parallel version).
 
     Updates each non-growth interior point as a weighted combination of its
     current value and the Gauss-Seidel update. Operates in-place on state.
@@ -90,6 +161,43 @@ def _step_nutrients(
 
             nutrients[last_row, column] = new
     return max_diff
+
+
+def _step_nutrients(
+    nutrients: npt.NDArray,
+    growths: npt.NDArray,
+    omega: float,
+    first_row: int,
+    last_row: int,
+    first_column: int,
+    last_column: int,
+    *,
+    numba_parallel: bool = False,
+) -> float:
+    """Call the appropriate JIT-compiled version.
+
+    Dynamically selects between serial and parallel implementations based on
+    the current value of numba_parallel.
+    """
+    if numba_parallel:
+        return _step_nutrients_parallel(
+            nutrients,
+            growths,
+            omega,
+            first_row,
+            last_row,
+            first_column,
+            last_column,
+        )
+    return _step_nutrients_serial(
+        nutrients,
+        growths,
+        omega,
+        first_row,
+        last_row,
+        first_column,
+        last_column,
+    )
 
 
 class NutrientWorker:
@@ -183,6 +291,7 @@ class DLA:
         eta: float,
         *,
         workers: int = 1,
+        numba_parallel: bool = False,
         epsilon: float = 1e-10,
         omega: float = 1,
         seed: int = 43,
@@ -208,6 +317,7 @@ class DLA:
         self._workers = workers
         if self._workers > 1:
             self.init_mp()
+        self._numba_parallel = numba_parallel
 
     def __del__(self) -> None:
         if self._workers > 1:
@@ -339,6 +449,7 @@ class DLA:
             last_row=self._grid_size - 1,
             first_column=0,
             last_column=self._grid_size - 1,
+            numba_parallel=self._numba_parallel,
         )
 
     @property
