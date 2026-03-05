@@ -3,14 +3,15 @@
 - src/: Source Python files:
   - src/assignment2-1.py: Plotting functionality for the the first Diffusion Limited Aggregation assignment.
   - src/dla.py: DLA logic of the first assignment.
+  - src/utils.py: Contains several global definitions and paths
 
 ### Data files:
-  - src/no_mp.csv: Timing results of experimenting with a grid of 100 by 100 and using no parallelization through either numba or multiprocessing.
-  - src/no_mp_large.csv: Same as above using a grid of 1000 by 1000.
-  - src/manual_mp.csv: Timing results of experimenting with a grid of 100 by 100 and 16 manual multiprocessing workers.
-  - src/manual_mp_large.csv: Same as above using a grid of 1000 by 1000.
-  - src/numba_mp.csv: Timing results of experimenting with a grid of 100 by 100 and setting the DLA's stepping iterator to use Numba's built in parallelization.
-  - src/numba_mp_large.csv: Same as above using a grid of 1000 by 1000.
+  - data/no_mp.csv: Timing results of experimenting with a grid of 100 by 100 and using no parallelization through either numba or multiprocessing.
+  - data/no_mp_large.csv: Same as above using a grid of 1000 by 1000.
+  - data/manual_mp.csv: Timing results of experimenting with a grid of 100 by 100 and 16 manual multiprocessing workers.
+  - data/manual_mp_large.csv: Same as above using a grid of 1000 by 1000.
+  - data/numba_mp.csv: Timing results of experimenting with a grid of 100 by 100 and setting the DLA's stepping iterator to use Numba's built in parallelization.
+  - data/numba_mp_large.csv: Same as above using a grid of 1000 by 1000.
 
 ## Usage:
 To create the python environment use:

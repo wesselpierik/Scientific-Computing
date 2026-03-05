@@ -1,18 +1,13 @@
 import argparse
 import csv
 import time
-from pathlib import Path
-from typing import TYPE_CHECKING
 
 import dla
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.axes import Axes
 from tqdm import tqdm
-
-if TYPE_CHECKING:
-    from matplotlib.axes import Axes
-
-local_dir = Path(__file__).parent
+from utils import data_dir
 
 parallelization = None
 
@@ -45,37 +40,60 @@ def create_dla(
     return dla.DLA(grid_size, eta, omega=omega, epsilon=epsilon, seed=seed)
 
 
-def plot_omega() -> None:
-    """Plot the influence of optimizing omega for the SOR solver."""
-    start_iterations = 1000
-    grid_size = 100
-    iterations = 50
-    epsilon = 1e-8
-    max_steps = 100000
+def plot_omega_steps(
+    start_grid: dla.DLA,
+    iterations: int,
+    max_steps: int,
+    all_omega: np.ndarray,
+    axes: Axes,
+    label: str,
+) -> None:
     all_steps = []
-    all_omega = np.linspace(1.75, 2, 20)
-
-    start_grid = create_dla(grid_size, 1, 1.95, epsilon)
-    for _ in tqdm(range(start_iterations)):
-        start_grid.step()
     for omega in tqdm(all_omega):
-        grid = create_dla(grid_size, 1, omega, epsilon)
+        # A lot of half legal variable accesses here.
+        grid = create_dla(start_grid._grid_size, 1, omega, start_grid._epsilon)  # noqa: SLF001
         grid._growths = start_grid._growths.copy()  # noqa: SLF001
         grid._nutrients = start_grid._nutrients.copy()  # noqa: SLF001
         grid._candidate_array = start_grid._candidate_array.copy()  # noqa: SLF001
         grid._candidate_list = list(start_grid._candidate_list)  # noqa: SLF001
         steps = 0
         for _ in range(iterations):
-            while steps < max_steps and grid.step_nutrients() > epsilon:
+            while steps < max_steps and grid.step_nutrients() > start_grid._epsilon:  # noqa: SLF001
                 steps += 1
             grid.grow_candidate()
         all_steps.append(steps)
+    axes.plot(all_omega, all_steps, label=label)
+
+
+def plot_omega() -> None:
+    """Plot the influence of optimizing omega for the SOR solver."""
     fig = plt.figure()
     axes = fig.subplots(ncols=1)
-    axes.set_title("Step count SOR for iterations 300-350")
     axes.set_xlabel(r"$\omega$")
     axes.set_ylabel("Steps")
-    axes.plot(all_omega, all_steps)
+
+    all_iterations = [100, 500, 1000]
+    grid_size = 100
+    iterations = 50
+    max_steps = 100000
+    epsilon = 1e-8
+    all_omega = np.linspace(1.75, 2, 20)
+
+    start_grid = create_dla(grid_size, 1, 1.95, epsilon)
+    prev_iterations = 0
+    for start_iterations in all_iterations:
+        for _ in tqdm(range(start_iterations - prev_iterations)):
+            start_grid.step()
+        plot_omega_steps(
+            start_grid,
+            iterations,
+            max_steps,
+            all_omega,
+            axes,
+            f"{start_iterations}-{start_iterations + iterations}",
+        )
+        prev_iterations = start_iterations
+    plt.legend()
     plt.show()
 
 
@@ -102,7 +120,7 @@ def plot_eta_path() -> None:
 
     path = np.zeros((3, grid_size, grid_size))
 
-    cached_path = local_dir / "eta_time_data.npy"
+    cached_path = data_dir / "eta_time_data.npy"
     if cached_path.exists():
         cached = np.load(cached_path)
         for i, avg in enumerate(cached):
@@ -159,7 +177,7 @@ def plot_eta() -> None:
 
     avg = np.zeros((3, grid_size, grid_size))
 
-    cached_path = local_dir / "eta_data.npy"
+    cached_path = data_dir / "eta_data.npy"
     if cached_path.exists():
         cached = np.load(cached_path)
         for i, avg in enumerate(cached):
@@ -196,7 +214,7 @@ def gather_small() -> None:
     Due to the simplicity of this function, it requires some hardcoding to
     try out different DLA configurations
     """
-    data_path = local_dir / "no_mp.csv"
+    data_path = data_dir / "no_mp.csv"
     grid_size = 100
     epsilon = 1e-8
     steps = 100
@@ -219,7 +237,7 @@ def gather_large() -> None:
     Due to the simplicity of this function, it requires some hardcoding to
     try out different DLA configurations
     """
-    data_path = local_dir / "manual_mp_large.csv"
+    data_path = data_dir / "manual_mp_large.csv"
     grid_size = 1000
     epsilon = 1e-6
     steps = 100
@@ -242,19 +260,19 @@ def plot_small() -> None:
     Requires the no_mp.csv, numba_mp.csv and manual_mp.csv to be present.
     """
     # Data reading
-    with (local_dir / "no_mp.csv").open("r") as f:
+    with (data_dir / "no_mp.csv").open("r") as f:
         reader = csv.reader(f)
         data = [float(x[0]) for x in reader]
         no_mp_mean = np.mean(data)
         no_mp_std = np.std(data)
 
-    with (local_dir / "numba_mp.csv").open("r") as f:
+    with (data_dir / "numba_mp.csv").open("r") as f:
         reader = csv.reader(f)
         data = [float(x[0]) for x in reader]
         numba_mp_mean = np.mean(data)
         numba_mp_std = np.std(data)
 
-    with (local_dir / "manual_mp.csv").open("r") as f:
+    with (data_dir / "manual_mp.csv").open("r") as f:
         reader = csv.reader(f)
         data = [float(x[0]) for x in reader]
         manual_mp_mean = np.mean(data)
@@ -290,10 +308,6 @@ def plot_small() -> None:
         fontsize=14,
     )
     axes.set_ylabel("Time (seconds)", fontsize=12)
-
-    # Add background color
-    axes.set_facecolor("#F8F9FA")
-    fig.patch.set_facecolor("white")
 
     plt.tight_layout()
     plt.show()
@@ -306,19 +320,19 @@ def plot_large() -> None:
     present.
     """
     # Data reading
-    with (local_dir / "no_mp_large.csv").open("r") as f:
+    with (data_dir / "no_mp_large.csv").open("r") as f:
         reader = csv.reader(f)
         data = [float(x[0]) for x in reader]
         no_mp_mean = np.mean(data)
         no_mp_std = np.std(data)
 
-    with (local_dir / "numba_mp_large.csv").open("r") as f:
+    with (data_dir / "numba_mp_large.csv").open("r") as f:
         reader = csv.reader(f)
         data = [float(x[0]) for x in reader]
         numba_mp_mean = np.mean(data)
         numba_mp_std = np.std(data)
 
-    with (local_dir / "manual_mp_large.csv").open("r") as f:
+    with (data_dir / "manual_mp_large.csv").open("r") as f:
         reader = csv.reader(f)
         data = [float(x[0]) for x in reader]
         manual_mp_mean = np.mean(data)
@@ -354,10 +368,6 @@ def plot_large() -> None:
         fontsize=14,
     )
     axes.set_ylabel("Time (seconds)", fontsize=12)
-
-    # Add background color
-    axes.set_facecolor("#F8F9FA")
-    fig.patch.set_facecolor("white")
 
     plt.tight_layout()
     plt.show()
