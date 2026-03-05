@@ -1,4 +1,4 @@
-"""TODO.
+"""Diffusion Limited Aggregation (DLA) simulation module.
 
 Group:        10
 Course:       Scientific Computing
@@ -202,9 +202,15 @@ def _step_nutrients(
 
 
 class NutrientWorker:
-    def __init__(
+    """Worker process for parallel nutrient diffusion computation.
+
+    Handles SOR iterations on a column-wise partition of the nutrient grid
+    for multiprocessed DLA simulation.
+    """
+
+    def __init__(  # noqa: PLR0913
         self,
-        id: int,
+        worker_id: int,
         nutrients: SynchronizedArray,
         grid_size: int,
         begin_column: int,
@@ -212,7 +218,19 @@ class NutrientWorker:
         growths: npt.NDArray,
         omega: float,
     ) -> None:
-        self._id = id
+        """Initialize a nutrient worker process.
+
+        Args:
+            worker_id: Unique worker identifier.
+            nutrients: Shared memory array for nutrient concentrations.
+            grid_size: Size of the square grid.
+            begin_column: Starting column index for this worker's region.
+            end_column: Ending column index for this worker's region.
+            growths: Boolean array marking growth regions (shared reference).
+            omega: Relaxation parameter for SOR iterations.
+
+        """
+        self._id = worker_id
 
         self._nutrients_shared = nutrients
         self._growths = growths
@@ -227,6 +245,17 @@ class NutrientWorker:
         self._epsilon2 = 0.0
 
     def _sync(self, nutrients: npt.NDArray) -> None:
+        """Synchronize worker state with parent process.
+
+        Sends current epsilon value to parent and receives growth updates.
+
+        Args:
+            nutrients: Local view of nutrient concentrations array.
+
+        Raises:
+            ValueError: If parent process connection is not established.
+
+        """
         if self._parent is None:
             error = "Not all workers are connected"
             raise ValueError(error)
@@ -238,6 +267,15 @@ class NutrientWorker:
             nutrients[row, column] = 0
 
     def _run_top_half(self, nutrients: npt.NDArray) -> float:
+        """Execute SOR iterations on the top half of the grid.
+
+        Args:
+            nutrients: Nutrient concentrations array.
+
+        Returns:
+            Maximum absolute difference from the SOR iteration.
+
+        """
         return _step_nutrients(
             nutrients,
             self._growths,
@@ -249,6 +287,15 @@ class NutrientWorker:
         )
 
     def _run_bottom_half(self, nutrients: npt.NDArray) -> float:
+        """Execute SOR iterations on the bottom half of the grid.
+
+        Args:
+            nutrients: Nutrient concentrations array.
+
+        Returns:
+            Maximum absolute difference from the SOR iteration.
+
+        """
         return _step_nutrients(
             nutrients,
             self._growths,
@@ -260,6 +307,12 @@ class NutrientWorker:
         )
 
     def run(self) -> None:
+        """Execute the worker's main loop for nutrient diffusion computation.
+
+        Runs indefinitely, alternating between top and bottom grid halves
+        and synchronizing with the parent process. Terminates when the parent
+        process terminates.
+        """
         nutrients = np.frombuffer(
             self._nutrients_shared.get_obj(),
             dtype=np.float64,
@@ -282,10 +335,22 @@ class NutrientWorker:
             self._sync(nutrients)
 
     def set_parent(self, pipe: object) -> None:
+        """Set the parent process communication pipe.
+
+        Args:
+            pipe: Duplex pipe for communication with parent process.
+
+        """
         self._parent = pipe
 
 
 class DLA:
+    """Diffusion Limited Aggregation simulator.
+
+    Manages the growth simulation with support for single-threaded, numba parallel,
+    or multiprocessed nutrient diffusion computation.
+    """
+
     def __init__(
         self,
         grid_size: int,
@@ -297,6 +362,21 @@ class DLA:
         omega: float = 1,
         seed: int = 43,
     ) -> None:
+        """Initialize DLA simulator.
+
+        Args:
+            grid_size: Side length of the square grid. Must be > 2.
+            eta: Growth probability exponent (higher = more clustered growth).
+            workers: Number of worker processes for multiprocessing. Defaults to 1.
+            numba_parallel: Use numba parallel execution if True. Defaults to False.
+            epsilon: Convergence threshold for nutrient diffusion. Defaults to 1e-10.
+            omega: SOR relaxation parameter. Defaults to 1 (Gauss-Seidel).
+            seed: Random seed for reproducibility. Defaults to 43.
+
+        Raises:
+            ValueError: If grid_size is too small (≤ 2).
+
+        """
         if grid_size <= 2:  # noqa: PLR2004
             size_error = "Grid size is too small for any meaningful calculation."
             raise ValueError(size_error)
@@ -321,11 +401,19 @@ class DLA:
         self._numba_parallel = numba_parallel
 
     def __del__(self) -> None:
+        """Cleanup worker processes on deletion.
+
+        Terminates all worker processes if multiprocessing is enabled.
+        """
         if self._workers > 1:
             [worker.terminate() for worker in self._worker_threads]
 
     def reset_grid(self) -> None:
-        """Reset the initial conditions for the nutrients, candidates and growths."""
+        """Reset the initial conditions for the nutrients, candidates and growths.
+
+        Places seed at the bottom center and initializes nutrient concentrations
+        from the top boundary (Dirichlet condition).
+        """
         middle = int(self._grid_size / 2)
         # Empty growths and place seed at middle bottom
         self._growths[:, :] = 0
@@ -341,6 +429,11 @@ class DLA:
         self._nutrients[0, :] = 1
 
     def init_mp(self) -> None:
+        """Initialize multiprocessing infrastructure for parallel diffusion computation.
+
+        Creates shared memory arrays, spawn worker processes, and establishes
+        bidirectional communication pipes for state synchronization.
+        """
         nutrients_shared = mp.Array("d", self._grid_size * self._grid_size)
         # X as a Numpy array
         self._nutrients_repr = np.frombuffer(
@@ -374,6 +467,16 @@ class DLA:
         [worker.start() for worker in self._worker_threads]
 
     def add_candidates(self, row: int, column: int) -> None:
+        """Add neighboring cells as growth candidates.
+
+        Marks the four orthogonal neighbors of the given cell as candidates
+        for potential growth, excluding occupied cells and already-added candidates.
+
+        Args:
+            row: Row index of the reference cell.
+            column: Column index of the reference cell.
+
+        """
         for row_offset, column_offset in [(-1, 0), (0, -1), (1, 0), (0, 1)]:
             new_row = row + row_offset
             new_column = (column + column_offset) % self._grid_size
@@ -390,11 +493,21 @@ class DLA:
             self._candidate_array[new_row, new_column] = True
 
     def stabilize_nutrients(self) -> None:
+        """Perform SOR iterations until nutrient diffusion converges.
+
+        Iteratively computes SOR steps until the maximum change falls below
+        the convergence threshold (epsilon). Used in single-threaded mode.
+        """
         current_epsilon = self.step_nutrients()
         while current_epsilon > self._epsilon:
             current_epsilon = self.step_nutrients()
 
     def stabilize_nutrients_mp(self) -> None:
+        """Perform multiprocessed SOR iterations until nutrient diffusion converges.
+
+        Coordinates worker processes to compute SOR steps on grid partitions until
+        convergence threshold is met. Synchronizes results via inter-process pipes.
+        """
         current_epsilon = np.max([pipe.recv() for pipe in self._pipes])
         while current_epsilon > self._epsilon:
             [pipe.send((-1, -1)) for pipe in self._pipes]
@@ -402,11 +515,18 @@ class DLA:
         np.copyto(self._nutrients, self._nutrients_repr)
 
     def grow_candidate(self) -> None:
+        """Probabilistically grow one candidate cell based on nutrient concentration.
+
+        Selects a candidate cell proportionally to the eta-th power of its
+        nutrient concentration, marks it as growth, and adds its neighbors as
+        new candidates. Synchronizes growth updates across worker processes if
+        multiprocessing is enabled.
+        """
         # Calculate probabilites for each candidate dependent on nutrient concentration
         ## Absolute value, as smallest concentrations may be just below 0
         concentrations = np.abs(
             np.array(
-                [self._nutrients[row, column] for row, column in self._candidate_list]
+                [self._nutrients[row, column] for row, column in self._candidate_list],
             ),
         )
         concentrations = np.pow(concentrations, self._eta)
@@ -428,6 +548,11 @@ class DLA:
             [pipe.send((row, column)) for pipe in self._pipes]
 
     def step(self) -> None:
+        """Execute one complete DLA growth step.
+
+        Stabilizes nutrient concentrations via diffusion and then grows one new
+        candidate cell probabilistically based on local nutrient concentrations.
+        """
         if self._workers <= 1:
             self.stabilize_nutrients()
         else:
@@ -497,6 +622,18 @@ def show_growth_step(
     growths_im: AxesImage,
     candidates_im: AxesImage,
 ) -> list[Artist]:
+    """Update animation frame with current DLA state.
+
+    Args:
+        _frame: Frame number (unused, required by FuncAnimation).
+        dla: DLA simulator instance.
+        nutrients_im: Matplotlib image object for nutrient display.
+        growths_im: Matplotlib image object for growth display.
+        candidates_im: Matplotlib image object for candidate display.
+
+    Returns:
+        List of artist objects that were updated for blitting.
+    """
     dla.step()
     nutrients_im.set_data(dla.nutrients)
     growths_im.set_data(dla.growths)
@@ -505,6 +642,14 @@ def show_growth_step(
 
 
 def show_growth(dla: DLA) -> None:
+    """Display animated DLA growth simulation.
+
+    Creates an interactive matplotlib animation showing nutrient concentrations,
+    growth regions, and candidate cells side-by-side.
+
+    Args:
+        dla: DLA simulator instance to visualize.
+    """
     fig = plt.figure()
     axis = fig.subplots(ncols=3)
     nutrients_im = axis[0].imshow(dla.nutrients)
@@ -528,6 +673,10 @@ def show_growth(dla: DLA) -> None:
 
 
 def main() -> None:
+    """Run DLA simulation with visualization.
+
+    Creates a 100x100 grid DLA simulator and displays the animated growth.
+    """
     grid_size = 100
     dla = DLA(grid_size, 1, omega=1.9, workers=1)
     show_growth(dla)
