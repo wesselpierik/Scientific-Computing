@@ -464,6 +464,7 @@ def parse_args() -> argparse.Namespace:
             "gather_large",
             "plot_small",
             "plot_large",
+            "all",
         ],
     )
     parser.add_argument(
@@ -499,6 +500,21 @@ def main() -> None:
     elif assignment == "plot_small":
         plot_small()
     elif assignment == "plot_large":
+        plot_large()
+    elif assignment == "all":
+        print(
+            "Warning some of these plots may take long to compute, ",
+            "calling the individual plotting functions is recommended.",
+        )
+        print("Omega")
+        plot_omega()
+        print("Eta")
+        plot_eta()
+        print("Eta path")
+        plot_eta_path()
+        print("Timing small")
+        plot_small()
+        print("Timing Large")
         plot_large()
 
 
