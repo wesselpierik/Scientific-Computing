@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-# @numba.njit
+@numba.njit
 def get_neighbours(c: np.ndarray, N:int, location):
     y, x = location
 
@@ -32,6 +32,7 @@ def get_new_location(location, N, neighbour_val=None):
     y, x = location
     directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
     random_direction = np.random.randint(4)
+    allowed_direction = []
 
     if neighbour_val is None:
         # Select random direction
@@ -43,12 +44,20 @@ def get_new_location(location, N, neighbour_val=None):
         new_x = x + dx
 
     else:
-        while neighbour_val[random_direction] == 2:
-            # print(f"get new direction, {random_direction}, {neighbour_val[random_direction]}")
-            random_direction = np.random.randint(4)
+        # while neighbour_val[random_direction] == 2:
+        #     # print(f"get new direction, {random_direction}, {neighbour_val[random_direction]}")
+        #     random_direction = np.random.randint(4)
+        for d in range(4):
+            if neighbour_val[d] != 2:
+                allowed_direction.append(directions[d])
 
-        direction = directions[random_direction]
-        dy, dx = direction
+        if len(allowed_direction) == 0:
+            return None
+
+        # direction = directions[random_direction]
+        # dy, dx = direction
+
+        dy, dx = allowed_direction[np.random.randint(len(allowed_direction))]
         new_y = y + dy
         new_x = x + dx
 
@@ -171,6 +180,7 @@ def main():
     elif option == "D":
         print("Part D")
         p_s = np.array([0.4, 0.6, 0.8, 1.0])
+        # p_s = np.linspace(0.2, 1.0, 10)
         # p_s = np.array([0.2, 1.0])
         c_sticking_prob = []
         tot_cluster_members = []
@@ -183,7 +193,7 @@ def main():
             c[-1, int(N/2)] = 2
 
             for walker in range(65000):
-                if walker % 5000 == 0: 
+                if walker % 20000 == 0: 
                     print(f"Random walker number {walker}")
                     
                 c = single_walker_stick(c, N, p_s[p])
