@@ -1,3 +1,17 @@
+"""Assignment 2: DLA Analysis and Visualization.
+
+Group:         10
+Course:        Scientific Computing
+
+Description:
+-----------
+This module provides tools for analyzing and visualizing Diffusion-Limited
+Aggregation (DLA) simulations across different eta and omega parameters.
+It includes functions for parameter sweeps, performance benchmarking, and
+visualization of growth patterns. Supports multiple parallelization backends
+(Numba, manual multiprocessing, or single-threaded).
+"""
+
 import argparse
 import csv
 import time
@@ -19,6 +33,19 @@ def create_dla(
     epsilon: float,
     seed: int = 43,
 ) -> dla.DLA:
+    """Create a DLA instance with the specified parameters.
+
+    Args:
+        grid_size: Size of the simulation grid.
+        eta: Nutrient diffusion bias parameter.
+        omega: Over-relaxation parameter for the SOR solver.
+        epsilon: Convergence tolerance for the SOR solver.
+        seed: Random seed for reproducibility (default 43).
+
+    Returns:
+        A configured DLA instance based on the global parallelization setting.
+
+    """
     if parallelization == "numba":
         return dla.DLA(
             grid_size,
@@ -48,6 +75,17 @@ def plot_omega_steps(
     axes: Axes,
     label: str,
 ) -> None:
+    """Plot the number of steps required for convergence across omega values.
+
+    Args:
+        start_grid: Initial DLA grid configuration to use as baseline.
+        iterations: Number of grow_candidate iterations per omega test.
+        max_steps: Maximum number of nutrient solver steps per iteration.
+        all_omega: Array of omega values to test.
+        axes: Matplotlib axes object to plot results on.
+        label: Legend label for the plotted data.
+
+    """
     all_steps = []
     for omega in tqdm(all_omega):
         # A lot of half legal variable accesses here.
@@ -66,7 +104,12 @@ def plot_omega_steps(
 
 
 def plot_omega() -> None:
-    """Plot the influence of optimizing omega for the SOR solver."""
+    """Plot the influence of optimizing omega for the SOR solver.
+
+    Tests a range of omega values (1.75 to 2.0) at different iteration
+    counts to demonstrate SOR convergence behavior. Results are plotted
+    with multiple iteration ranges for comparison.
+    """
     fig = plt.figure()
     axes = fig.subplots(ncols=1)
     axes.set_xlabel(r"$\omega$")
@@ -98,7 +141,12 @@ def plot_omega() -> None:
 
 
 def plot_eta_path() -> None:
-    """Plot the influence of choosing a higher or lower eta value."""
+    """Plot the growth path with different eta bias values.
+
+    Visualizes the time-dependent growth patterns for eta values of 0, 1,
+    and 2. Data is cached to avoid recomputation. Shows how nutrient bias
+    affects the spatial distribution of growth over time.
+    """
     grid_size = 100
     fig = plt.figure()
     axes = fig.subplots(ncols=3)
@@ -120,6 +168,7 @@ def plot_eta_path() -> None:
 
     path = np.zeros((3, grid_size, grid_size))
 
+    # Use cached version or compute anew
     cached_path = data_dir / "eta_time_data.npy"
     if cached_path.exists():
         cached = np.load(cached_path)
@@ -155,7 +204,13 @@ def plot_eta_path() -> None:
 
 
 def plot_eta() -> None:
-    """Plot the influence of choosing a higher or lower eta value."""
+    """Plot the average growth with different eta bias values.
+
+    Visualizes the average growth patterns for eta values of 0, 1, and 2
+    over 1000 iterations with 10 runs each. Data is cached to avoid
+    recomputation. Shows how nutrient bias affects the overall growth
+    distribution.
+    """
     grid_size = 100
     fig = plt.figure()
     axes = fig.subplots(ncols=3)
@@ -209,12 +264,18 @@ def plot_eta() -> None:
 
 
 def gather_small() -> None:
-    """Gather the time it takes for the grid to complete 100 steps.
+    """Benchmark small grid (100x100) performance over 100 steps.
 
-    Due to the simplicity of this function, it requires some hardcoding to
-    try out different DLA configurations
+    Measures execution time for 100 steps on a 100x100 grid over 100
+    iterations. Results are written in the data directory to 'no_mp.csv',
+    "numba_mp.csv" or "manual_mp.csv" dependent on the type of parallelization.
     """
-    data_path = data_dir / "no_mp.csv"
+    if parallelization == "numba":
+        data_path = data_dir / "numba_mp.csv"
+    elif parallelization == "manual":
+        data_path = data_dir / "manual_mp.csv"
+    else:
+        data_path = data_dir / "no_mp.csv"
     grid_size = 100
     epsilon = 1e-8
     steps = 100
@@ -232,12 +293,19 @@ def gather_small() -> None:
 
 
 def gather_large() -> None:
-    """Gather the time it takes for the grid to complete 100 steps.
+    """Benchmark large grid (1000x1000) performance over 100 steps.
 
-    Due to the simplicity of this function, it requires some hardcoding to
-    try out different DLA configurations
+    Measures execution time for 100 steps on a 1000x1000 grid over 10
+    iterations. Results are written in the data directory to 'no_mp_large.csv',
+    "numba_mp_large.csv" or "manual_mp_large.csv" dependent on the type of
+    parallelization.
     """
-    data_path = data_dir / "manual_mp_large.csv"
+    if parallelization == "numba":
+        data_path = data_dir / "numba_mp_large.csv"
+    elif parallelization == "manual":
+        data_path = data_dir / "manual_mp_large.csv"
+    else:
+        data_path = data_dir / "no_mp_large.csv"
     grid_size = 1000
     epsilon = 1e-6
     steps = 100
@@ -255,9 +323,11 @@ def gather_large() -> None:
 
 
 def plot_small() -> None:
-    """Plot the time data from the gather_small function.
+    """Plot performance comparison for small grids (100x100).
 
-    Requires the no_mp.csv, numba_mp.csv and manual_mp.csv to be present.
+    Reads timing data from CSV files (no_mp.csv, numba_mp.csv,
+    manual_mp.csv) and displays a bar chart with error bars comparing
+    the three parallelization approaches for 100-step benchmarks.
     """
     # Data reading
     with (data_dir / "no_mp.csv").open("r") as f:
@@ -314,10 +384,11 @@ def plot_small() -> None:
 
 
 def plot_large() -> None:
-    """Plot the time data from the gather_small function.
+    """Plot performance comparison for large grids (1000x1000).
 
-    Requires the no_mp_large.csv, numba_mp_large.csv and manual_mp_large.csv to be
-    present.
+    Reads timing data from CSV files (no_mp_large.csv, numba_mp_large.csv,
+    manual_mp_large.csv) and displays a bar chart with error bars comparing
+    the three parallelization approaches for 100-step benchmarks.
     """
     # Data reading
     with (data_dir / "no_mp_large.csv").open("r") as f:
@@ -374,6 +445,13 @@ def plot_large() -> None:
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for assignment selection.
+
+    Returns:
+        Namespace containing 'assignment' (plot/gather function name) and
+        'parallelization' (backend: 'none', 'numba', or 'manual').
+
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "assignment",
@@ -397,6 +475,12 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Execute the selected assignment analysis or benchmarking task.
+
+    Parses command-line arguments to determine which analysis to run
+    (omega/eta plots, eta path visualization, or performance gathering/
+    plotting) and applies the selected parallelization backend.
+    """
     global parallelization  # noqa: PLW0603
 
     args = parse_args()
