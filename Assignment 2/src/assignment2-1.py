@@ -17,9 +17,11 @@ import csv
 import time
 
 import dla
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
+from plots import rcCustom_wide
 from tqdm import tqdm
 from utils import data_dir
 
@@ -103,6 +105,7 @@ def plot_omega_steps(
     axes.plot(all_omega, all_steps, label=label)
 
 
+@mpl.rc_context(rcCustom_wide)
 def plot_omega() -> None:
     """Plot the influence of optimizing omega for the SOR solver.
 
@@ -137,9 +140,10 @@ def plot_omega() -> None:
         )
         prev_iterations = start_iterations
     plt.legend()
-    plt.show()
+    plt.savefig("omega.png")
 
 
+@mpl.rc_context(rcCustom_wide)
 def plot_eta_path() -> None:
     """Plot the growth path with different eta bias values.
 
@@ -200,9 +204,10 @@ def plot_eta_path() -> None:
     cbar.ax.set_xticks([1, 0])
     cbar.ax.set_xticklabels(["Start", "End"])
 
-    plt.show()
+    plt.savefig("eta_path.png")
 
 
+@mpl.rc_context(rcCustom_wide)
 def plot_eta() -> None:
     """Plot the average growth with different eta bias values.
 
@@ -260,7 +265,7 @@ def plot_eta() -> None:
     cbar.ax.set_xticks([10, 0])
     cbar.ax.set_xticklabels(["Always reached", "Never reached"])
 
-    plt.show()
+    plt.savefig("eta.png")
 
 
 def gather_small() -> None:
@@ -322,6 +327,7 @@ def gather_large() -> None:
         writer.writerows(latencies)
 
 
+@mpl.rc_context(rcCustom_wide)
 def plot_small() -> None:
     """Plot performance comparison for small grids (100x100).
 
@@ -349,7 +355,7 @@ def plot_small() -> None:
         manual_mp_std = np.std(data)
 
     # Plotting
-    fig = plt.figure(figsize=(12, 6))
+    fig = plt.figure()
     axes = fig.subplots(ncols=1)
     labels = ["Control", "Multiprocessing", "Numba"]
     means = [no_mp_mean, manual_mp_mean, numba_mp_mean]
@@ -375,14 +381,14 @@ def plot_small() -> None:
     axes.grid(axis="y", alpha=0.3, linestyle="--")
     axes.set_title(
         "Average computation time for 100 DLA steps",
-        fontsize=14,
     )
-    axes.set_ylabel("Time (seconds)", fontsize=12)
+    axes.set_ylabel("Time (seconds)")
 
     plt.tight_layout()
-    plt.show()
+    plt.savefig("time_small.png")
 
 
+@mpl.rc_context(rcCustom_wide)
 def plot_large() -> None:
     """Plot performance comparison for large grids (1000x1000).
 
@@ -410,7 +416,7 @@ def plot_large() -> None:
         manual_mp_std = np.std(data)
 
     # Plotting
-    fig = plt.figure(figsize=(12, 6))
+    fig = plt.figure()
     axes = fig.subplots(ncols=1)
     labels = ["Control", "Multiprocessing", "Numba"]
     means = [no_mp_mean, manual_mp_mean, numba_mp_mean]
@@ -436,12 +442,11 @@ def plot_large() -> None:
     axes.grid(axis="y", alpha=0.3, linestyle="--")
     axes.set_title(
         "Average computation time for 100 DLA steps",
-        fontsize=14,
     )
-    axes.set_ylabel("Time (seconds)", fontsize=12)
+    axes.set_ylabel("Time (seconds)")
 
     plt.tight_layout()
-    plt.show()
+    plt.savefig("time_large.png")
 
 
 def parse_args() -> argparse.Namespace:
