@@ -12,7 +12,7 @@ def parse_args() -> argparse.Namespace:
     """    
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "option", help="Determine the code to run", choices=["C", "D"]
+        "option", help="Determine the code to run", choices=["C", "D", "D_averaged"]
     )
     return parser.parse_args()
 
@@ -153,13 +153,16 @@ def main():
         # Initial stationary point at the bottom of the grid
         c[-1, int(N/2)] = 2
 
+        cluster_size = 1
         for walker in range(65000):
             if walker % 5000 == 0: 
                 print(f"Random walker number {walker}")
                 
-            c, cluster_size = single_walker(c, N)
-            first_row = c[0,]
+            c, cluster_size = single_walker(c, N, cluster_size)
         walker_total = walker + 1
+        cluster_size_total = cluster_size
+        print(f"Final cluster size: {cluster_size_total} after {walker_total} random walkers")
+
         #######
 
         # Average over 10 iterations
@@ -176,7 +179,7 @@ def main():
             c_i[-1, int(N/2)] = 2
 
             walker = 0
-            while cluster_size < 1000:
+            while np.sum(c_i) / 2 < 1000:
                 if walker % 5000 == 0: 
                     print(f"Random walker number {walker}")
                     
@@ -266,6 +269,63 @@ def main():
         plt.ylabel("Final cluster size")
         plt.show()
 
+    elif option == "D_averaged":
+        print("Part D averaged")
+        p_s = np.array([0.4, 0.6, 0.8, 1.0])
+        c_sticking_prob = []
+        tot_cluster_members = []
+
+        for p in range(len(p_s)):
+            # Array with all final clusters for each iteration
+            c_all = np.zeros((N, N, 10))
+
+            for i in range(10):
+                print(f"Iteration {i} for sticking probability {p_s[p]}")
+                # Create the grid
+                c_i = np.zeros((N, N))
+
+                # Initial stationary point at the bottom of the grid
+                c_i[-1, int(N/2)] = 2
+
+                walker = 0
+                while np.sum(c_i) / 2 < 1000:
+                    if walker % 20000 == 0: 
+                        print(f"Random walker number {walker}")
+                        
+                    c_i = single_walker_stick(c_i, N, p_s[p])
+                    walker += 1
+
+                c_all[:, :, i] = c_i
+            
+            # Average over all iterations
+            c_avg = np.mean(c_all, axis=2)
+            tot_cluster_members.append(np.sum(c_avg) / 2)
+            c_sticking_prob.append(c_avg)
+            
+        # Show final clusters
+        fig, axs = plt.subplots(nrows=2, ncols=2, layout='constrained')
+        
+        ax = axs[0,0]
+        ax.imshow(c_sticking_prob[0])
+        ax.set_title(f"Sticking probability = {p_s[0]}")
+
+        ax = axs[0,1]
+        ax.imshow(c_sticking_prob[1])
+        ax.set_title(f"Sticking probability = {p_s[1]}")
+
+        ax = axs[1,0]
+        ax.imshow(c_sticking_prob[2])
+        ax.set_title(f"Sticking probability = {p_s[2]}")
+
+        ax = axs[1,1]
+        ax.imshow(c_sticking_prob[3])
+        ax.set_title(f"Sticking probability = {p_s[3]}")
+
+        for ax in axs.ravel():
+            ax.set_xlabel("x")
+            ax.set_ylabel("y")
+
+        plt.show()
 
 if __name__ == "__main__":
     main()
