@@ -12,7 +12,7 @@ def parse_args() -> argparse.Namespace:
     """    
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "option", help="Determine the code to run", choices=["C", "C_averaged", "D"]
+        "option", help="Determine the code to run", choices=["C", "D"]
     )
     return parser.parse_args()
 
@@ -159,15 +159,10 @@ def main():
                 
             c, cluster_size = single_walker(c, N)
             first_row = c[0,]
+        walker_total = walker + 1
+        #######
 
-        # Show final cluster
-        plt.imshow(c)
-        plt.title(f"Final cluster after {walker + 1} random walkers")
-        plt.xlabel("x")
-        plt.ylabel("y")
-        plt.show()
-    
-    elif option == "C_averaged":
+        # Average over 10 iterations
         # Array with all final clusters for each iteration
         c_all = np.zeros((N, N, 10))
 
@@ -175,29 +170,37 @@ def main():
             cluster_size = 1
             print(f"Iteration {i}")
             # Create the grid
-            c = np.zeros((N, N))
+            c_i = np.zeros((N, N))
 
             # Initial stationary point at the bottom of the grid
-            c[-1, int(N/2)] = 2
+            c_i[-1, int(N/2)] = 2
 
             walker = 0
             while cluster_size < 1000:
                 if walker % 5000 == 0: 
                     print(f"Random walker number {walker}")
                     
-                c, cluster_size = single_walker(c, N, cluster_size)
+                c_i, cluster_size = single_walker(c_i, N, cluster_size)
                 walker += 1
 
-            c_all[:, :, i] = c
+            c_all[:, :, i] = c_i
         
         # Average over all iterations
         c_avg = np.mean(c_all, axis=2)
 
-        # Show final cluster
-        plt.imshow(c_avg)
-        plt.title(f"Average cluster for a cluster size of {cluster_size}, averaged over 10 iterations")
-        plt.xlabel("x")
-        plt.ylabel("y")
+        fig, axs = plt.subplots(nrows=1, ncols=2, layout='constrained')
+        ax = axs[0]
+        ax.imshow(c)
+        ax.set_title(f"Final cluster after {walker_total} random walkers")
+
+        ax = axs[1]
+        ax.imshow(c_avg)
+        ax.set_title(f"Average cluster for a cluster size of {cluster_size}, averaged over 10 iterations")
+
+        for ax in axs.ravel():
+            ax.set_xlabel("x")
+            ax.set_ylabel("y")
+
         plt.show()
 
     elif option == "D":
@@ -226,7 +229,7 @@ def main():
 
         # Show final clusters
         fig, axs = plt.subplots(nrows=2, ncols=2, layout='constrained')
-        fig.suptitle(f"Final clusters after {walker + 1} random walkers, for different sticking probabilities")
+        # fig.suptitle(f"Final clusters after {walker + 1} random walkers, for different sticking probabilities")
         
         ax = axs[0,0]
         ax.imshow(c_sticking_prob[0])
