@@ -12,7 +12,7 @@ def parse_args() -> argparse.Namespace:
     """    
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "option", help="Determine the code to run", choices=["C", "D"]
+        "option", help="Determine the code to run", choices=["C", "C_averaged", "D"]
     )
     return parser.parse_args()
 
@@ -74,7 +74,7 @@ def get_new_location(location, N, neighbour_val=None):
 
     return new_location
 
-def single_walker(c:np.ndarray, N:int) -> np.ndarray:
+def single_walker(c:np.ndarray, N:int, cluster_size:int=1) -> np.ndarray:
     # Generate walker on random point at the top of the grid
     location = (0, np.random.randint(0, N))
     c[location] = 1
@@ -88,6 +88,7 @@ def single_walker(c:np.ndarray, N:int) -> np.ndarray:
 
         if 2 in neighbour_val:
             c[location] = 2
+            cluster_size += 1
             # print("walker is now part of cluster")
             # print(c)
             break
@@ -96,11 +97,11 @@ def single_walker(c:np.ndarray, N:int) -> np.ndarray:
         
         if location is None:
             # print("Remove walker")
-            return c
+            return c, cluster_size
         else:
             c[location] = 1
 
-    return c
+    return c, cluster_size
 
 def single_walker_stick(c:np.ndarray, N:int, p_s:float) -> np.ndarray:
     # Generate walker on random point at the top of the grid
@@ -152,21 +153,11 @@ def main():
         # Initial stationary point at the bottom of the grid
         c[-1, int(N/2)] = 2
 
-        # first_row = c[0,]
-        # walker = 0
-        # while 0 in first_row:
-        #     walker += 1
-        #     if walker % 5000 == 0: 
-        #         print(f"Random walker number {walker + 1}")
-                
-        #     c = single_walker(c, N)
-        #     first_row = c[0,]
-
         for walker in range(65000):
             if walker % 5000 == 0: 
                 print(f"Random walker number {walker}")
                 
-            c = single_walker(c, N)
+            c, cluster_size = single_walker(c, N)
             first_row = c[0,]
 
         # Show final cluster
@@ -175,7 +166,39 @@ def main():
         plt.xlabel("x")
         plt.ylabel("y")
         plt.show()
+    
+    elif option == "C_averaged":
+        # Array with all final clusters for each iteration
+        c_all = np.zeros((N, N, 10))
+
+        for i in range(10):
+            cluster_size = 1
+            print(f"Iteration {i}")
+            # Create the grid
+            c = np.zeros((N, N))
+
+            # Initial stationary point at the bottom of the grid
+            c[-1, int(N/2)] = 2
+
+            walker = 0
+            while cluster_size < 1000:
+                if walker % 5000 == 0: 
+                    print(f"Random walker number {walker}")
+                    
+                c, cluster_size = single_walker(c, N, cluster_size)
+                walker += 1
+
+            c_all[:, :, i] = c
         
+        # Average over all iterations
+        c_avg = np.mean(c_all, axis=2)
+
+        # Show final cluster
+        plt.imshow(c_avg)
+        plt.title(f"Average cluster for a cluster size of {cluster_size}, averaged over 10 iterations")
+        plt.xlabel("x")
+        plt.ylabel("y")
+        plt.show()
 
     elif option == "D":
         print("Part D")
