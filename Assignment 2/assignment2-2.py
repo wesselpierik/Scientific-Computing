@@ -27,89 +27,77 @@ def get_neighbours(c: np.ndarray, N:int, location):
 
     return int(top), int(bottom), int(right), int(left)
 
-# @numba.njit
-def get_new_location(location, N, neighbour_val=None):
+@numba.njit
+def get_new_location(c, location, N):
     y, x = location
     directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-    random_direction = np.random.randint(4)
-    allowed_direction = []
+    allowed_locations = []
 
-    if neighbour_val is None:
-        # Select random direction
-        direction = directions[random_direction]
-        dy, dx = direction
-        # print(direction)
-
+    for dy, dx in directions:
         new_y = y + dy
         new_x = x + dx
 
-    else:
-        # while neighbour_val[random_direction] == 2:
-        #     # print(f"get new direction, {random_direction}, {neighbour_val[random_direction]}")
-        #     random_direction = np.random.randint(4)
-        for d in range(4):
-            if neighbour_val[d] != 2:
-                allowed_direction.append(directions[d])
+        # Boundary conditions for upper and lower boundaries
+        if new_y < 0 or new_y > N - 1:
+            continue
 
-        if len(allowed_direction) == 0:
-            return None
+        # Periodic boundary conditions for left and right boundaries
+        if new_x < 0:
+            new_x = N - 1
 
-        # direction = directions[random_direction]
-        # dy, dx = direction
+        elif new_x > N - 1:
+            new_x = 0
 
-        dy, dx = allowed_direction[np.random.randint(len(allowed_direction))]
-        new_y = y + dy
-        new_x = x + dx
+        # Check if new location is not on cluster
+        if c[new_y, new_x] != 2:
+            allowed_locations.append((new_y, new_x))
 
-    if new_y < 0 or new_y > N - 1:
+    # Remove walker if all neighbours are part of the cluster
+    if len(allowed_locations) == 0:
         return None
-
-    elif new_x < 0:
-        new_x = N - 1
-
-    elif new_x > N - 1:
-        new_x = 0
-
-    new_location = (new_y, new_x)
-
+    
+    new_location = allowed_locations[np.random.randint(len(allowed_locations))]
     return new_location
 
-def single_walker(c:np.ndarray, N:int, cluster_size:int=1) -> np.ndarray:
+@numba.njit
+def single_walker(c:np.ndarray, N:int) -> np.ndarray:
     # Generate walker on random point at the top of the grid
     location = (0, np.random.randint(0, N))
-    c[location] = 1
+    y, x = location
+    c[y, x] = 1
 
-    while c[location] != 2:
-        c[location] = 0
+    while c[y, x] != 2:
+        c[y, x] = 0
 
         # Get values of neighbours
         neighbour_val = get_neighbours(c, N, location)
         # print(neighbour_val)
 
         if 2 in neighbour_val:
-            c[location] = 2
-            cluster_size += 1
+            c[y, x] = 2
             # print("walker is now part of cluster")
             # print(c)
             break
         
-        location = get_new_location(location, N)
-        
+        location = get_new_location(c, location, N)
+        y, x = location
         if location is None:
             # print("Remove walker")
-            return c, cluster_size
+            return c
         else:
-            c[location] = 1
+            c[y, x] = 1
 
-    return c, cluster_size
+    return c
 
+@numba.njit
 def single_walker_stick(c:np.ndarray, N:int, p_s:float) -> np.ndarray:
     # Generate walker on random point at the top of the grid
     location = (0, np.random.randint(0, N))
-    c[location] = 1
+    y, x = location
+    c[y, x] = 1
 
-    while c[location] != 2:
-        c[location] = 0
+    while c[y, x] != 2:
+        c[y, x] = 0
 
         # Get values of neighbours
         neighbour_val = get_neighbours(c, N, location)
@@ -117,21 +105,23 @@ def single_walker_stick(c:np.ndarray, N:int, p_s:float) -> np.ndarray:
 
         if 2 in neighbour_val:
             if np.random.rand() <= p_s:
-                c[location] = 2
+                c[y, x] = 2
                 # print("walker is now part of cluster")
                 # print(c)
                 break
             else:
-                location = get_new_location(location, N, neighbour_val)
+                location = get_new_location(c, location, N)
 
         else:
-            location = get_new_location(location, N)
+            location = get_new_location(c, location, N)
         
+
         if location is None:
             # print("Remove walker")
             return c
         else:
-            c[location] = 1
+            y, x = location
+            c[y, x] = 1
 
         # print(c)
     
@@ -153,15 +143,12 @@ def main():
         # Initial stationary point at the bottom of the grid
         c[-1, int(N/2)] = 2
 
-        cluster_size = 1
-        for walker in range(65000):
-            if walker % 5000 == 0: 
-                print(f"Random walker number {walker}")
+        for walker in range(1000):
+            # if walker % 5000 == 0: 
+                # print(f"Random walker number {walker}")
                 
-            c, cluster_size = single_walker(c, N, cluster_size)
+            c = single_walker(c, N)
         walker_total = walker + 1
-        cluster_size_total = cluster_size
-        print(f"Final cluster size: {cluster_size_total} after {walker_total} random walkers")
 
         #######
 
@@ -170,7 +157,6 @@ def main():
         c_all = np.zeros((N, N, 10))
 
         for i in range(10):
-            cluster_size = 1
             print(f"Iteration {i}")
             # Create the grid
             c_i = np.zeros((N, N))
@@ -180,10 +166,10 @@ def main():
 
             walker = 0
             while np.sum(c_i) / 2 < 1000:
-                if walker % 5000 == 0: 
-                    print(f"Random walker number {walker}")
+                # if walker % 5000 == 0: 
+                #     print(f"Random walker number {walker}")
                     
-                c_i, cluster_size = single_walker(c_i, N, cluster_size)
+                c_i = single_walker(c_i, N)
                 walker += 1
 
             c_all[:, :, i] = c_i
@@ -194,11 +180,11 @@ def main():
         fig, axs = plt.subplots(nrows=1, ncols=2, layout='constrained')
         ax = axs[0]
         ax.imshow(c)
-        ax.set_title(f"Final cluster after {walker_total} random walkers")
+        ax.set_title(f"Final cluster with size 1000.")
 
         ax = axs[1]
         ax.imshow(c_avg)
-        ax.set_title(f"Average cluster for a cluster size of {cluster_size}, averaged over 10 iterations")
+        ax.set_title(f"Average cluster for a cluster size of 1000, averaged over 10 iterations")
 
         for ax in axs.ravel():
             ax.set_xlabel("x")
@@ -222,8 +208,8 @@ def main():
             c[-1, int(N/2)] = 2
 
             for walker in range(65000):
-                if walker % 20000 == 0: 
-                    print(f"Random walker number {walker}")
+                # if walker % 20000 == 0: 
+                #     print(f"Random walker number {walker}")
                     
                 c = single_walker_stick(c, N, p_s[p])
 
@@ -289,8 +275,8 @@ def main():
 
                 walker = 0
                 while np.sum(c_i) / 2 < 1000:
-                    if walker % 20000 == 0: 
-                        print(f"Random walker number {walker}")
+                    # if walker % 20000 == 0: 
+                    #     print(f"Random walker number {walker}")
                         
                     c_i = single_walker_stick(c_i, N, p_s[p])
                     walker += 1
