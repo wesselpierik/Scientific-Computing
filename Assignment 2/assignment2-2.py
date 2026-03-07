@@ -29,6 +29,7 @@ def get_neighbours(c: np.ndarray, N:int, location):
 
 @numba.njit
 def get_new_location(c, location, N):
+    # np.random.seed(0)
     y, x = location
     directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
     allowed_locations = []
@@ -61,6 +62,7 @@ def get_new_location(c, location, N):
 
 @numba.njit
 def single_walker(c:np.ndarray, N:int) -> np.ndarray:
+    # np.random.seed(0)
     # Generate walker on random point at the top of the grid
     location = (0, np.random.randint(0, N))
     y, x = location
@@ -91,6 +93,7 @@ def single_walker(c:np.ndarray, N:int) -> np.ndarray:
 
 @numba.njit
 def single_walker_stick(c:np.ndarray, N:int, p_s:float) -> np.ndarray:
+    # np.random.seed(0)
     # Generate walker on random point at the top of the grid
     location = (0, np.random.randint(0, N))
     y, x = location
@@ -131,7 +134,7 @@ def main():
     args = parse_args()
     option = args.option
 
-    np.random.seed(0)
+    # np.random.seed(0)
 
     # Grid size
     N = 100
@@ -148,7 +151,6 @@ def main():
                 # print(f"Random walker number {walker}")
                 
             c = single_walker(c, N)
-        walker_total = walker + 1
 
         #######
 
@@ -164,13 +166,11 @@ def main():
             # Initial stationary point at the bottom of the grid
             c_i[-1, int(N/2)] = 2
 
-            walker = 0
-            while np.sum(c_i) / 2 < 1000:
+            for walker in range(1000):
                 # if walker % 5000 == 0: 
                 #     print(f"Random walker number {walker}")
                     
                 c_i = single_walker(c_i, N)
-                walker += 1
 
             c_all[:, :, i] = c_i
         
@@ -180,7 +180,7 @@ def main():
         fig, axs = plt.subplots(nrows=1, ncols=2, layout='constrained')
         ax = axs[0]
         ax.imshow(c)
-        ax.set_title(f"Final cluster with size 1000.")
+        ax.set_title(f"Final cluster with size 1000")
 
         ax = axs[1]
         ax.imshow(c_avg)
@@ -193,7 +193,6 @@ def main():
         plt.show()
 
     elif option == "D":
-        print("Part D")
         p_s = np.array([0.4, 0.6, 0.8, 1.0])
         # p_s = np.linspace(0.2, 1.0, 10)
         # p_s = np.array([0.2, 1.0])
@@ -207,7 +206,7 @@ def main():
             # Initial stationary point at the bottom of the grid
             c[-1, int(N/2)] = 2
 
-            for walker in range(65000):
+            for walker in range(1000):
                 # if walker % 20000 == 0: 
                 #     print(f"Random walker number {walker}")
                     
@@ -240,23 +239,10 @@ def main():
             ax.set_xlabel("x")
             ax.set_ylabel("y")
 
-        # for i in range(len(p_s)):
-        #     ax = axs[i]
-        #     ax.imshow(c_sticking_prob[i])
-        #     ax.set_title(f"Sticking probability = {p_s[i]}")
-        #     ax.set_xlabel("x")
-        #     ax.set_ylabel("y")
         plt.show()
 
-        plt.figure()
-        plt.plot(p_s, tot_cluster_members)
-        plt.grid(True)
-        plt.xlabel(r"Sticking probability $p_s$")
-        plt.ylabel("Final cluster size")
-        plt.show()
 
     elif option == "D_averaged":
-        print("Part D averaged")
         p_s = np.array([0.4, 0.6, 0.8, 1.0])
         c_sticking_prob = []
         tot_cluster_members = []
@@ -273,13 +259,11 @@ def main():
                 # Initial stationary point at the bottom of the grid
                 c_i[-1, int(N/2)] = 2
 
-                walker = 0
-                while np.sum(c_i) / 2 < 1000:
+                for walker in range(1000):
                     # if walker % 20000 == 0: 
                     #     print(f"Random walker number {walker}")
                         
                     c_i = single_walker_stick(c_i, N, p_s[p])
-                    walker += 1
 
                 c_all[:, :, i] = c_i
             
