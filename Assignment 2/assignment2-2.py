@@ -62,7 +62,6 @@ def get_new_location(c, location, N):
 
 @numba.njit
 def single_walker(c:np.ndarray, N:int) -> np.ndarray:
-    # np.random.seed(0)
     # Generate walker on random point at the top of the grid
     location = (0, np.random.randint(0, N))
     y, x = location
@@ -73,18 +72,14 @@ def single_walker(c:np.ndarray, N:int) -> np.ndarray:
 
         # Get values of neighbours
         neighbour_val = get_neighbours(c, N, location)
-        # print(neighbour_val)
 
         if 2 in neighbour_val:
             c[y, x] = 2
-            # print("walker is now part of cluster")
-            # print(c)
             break
         
         location = get_new_location(c, location, N)
         y, x = location
         if location is None:
-            # print("Remove walker")
             return c
         else:
             c[y, x] = 1
@@ -93,7 +88,6 @@ def single_walker(c:np.ndarray, N:int) -> np.ndarray:
 
 @numba.njit
 def single_walker_stick(c:np.ndarray, N:int, p_s:float) -> np.ndarray:
-    # np.random.seed(0)
     # Generate walker on random point at the top of the grid
     location = (0, np.random.randint(0, N))
     y, x = location
@@ -104,13 +98,10 @@ def single_walker_stick(c:np.ndarray, N:int, p_s:float) -> np.ndarray:
 
         # Get values of neighbours
         neighbour_val = get_neighbours(c, N, location)
-        # print(neighbour_val)
 
         if 2 in neighbour_val:
             if np.random.rand() <= p_s:
                 c[y, x] = 2
-                # print("walker is now part of cluster")
-                # print(c)
                 break
             else:
                 location = get_new_location(c, location, N)
@@ -120,21 +111,16 @@ def single_walker_stick(c:np.ndarray, N:int, p_s:float) -> np.ndarray:
         
 
         if location is None:
-            # print("Remove walker")
             return c
         else:
             y, x = location
             c[y, x] = 1
-
-        # print(c)
     
     return c
 
 def main(): 
     args = parse_args()
     option = args.option
-
-    # np.random.seed(0)
 
     # Grid size
     N = 100
@@ -146,10 +132,7 @@ def main():
         # Initial stationary point at the bottom of the grid
         c[-1, int(N/2)] = 2
 
-        for walker in range(1000):
-            # if walker % 5000 == 0: 
-                # print(f"Random walker number {walker}")
-                
+        for walker in range(1000):                
             c = single_walker(c, N)
 
         #######
@@ -167,9 +150,6 @@ def main():
             c_i[-1, int(N/2)] = 2
 
             for walker in range(1000):
-                # if walker % 5000 == 0: 
-                #     print(f"Random walker number {walker}")
-                    
                 c_i = single_walker(c_i, N)
 
             c_all[:, :, i] = c_i
@@ -194,8 +174,6 @@ def main():
 
     elif option == "D":
         p_s = np.array([0.4, 0.6, 0.8, 1.0])
-        # p_s = np.linspace(0.2, 1.0, 10)
-        # p_s = np.array([0.2, 1.0])
         c_sticking_prob = []
         tot_cluster_members = []
 
@@ -207,9 +185,6 @@ def main():
             c[-1, int(N/2)] = 2
 
             for walker in range(1000):
-                # if walker % 20000 == 0: 
-                #     print(f"Random walker number {walker}")
-                    
                 c = single_walker_stick(c, N, p_s[p])
 
             tot_cluster_members.append(np.sum(c) / 2)
@@ -217,7 +192,6 @@ def main():
 
         # Show final clusters
         fig, axs = plt.subplots(nrows=2, ncols=2, layout='constrained')
-        # fig.suptitle(f"Final clusters after {walker + 1} random walkers, for different sticking probabilities")
         
         ax = axs[0,0]
         ax.imshow(c_sticking_prob[0])
@@ -259,10 +233,7 @@ def main():
                 # Initial stationary point at the bottom of the grid
                 c_i[-1, int(N/2)] = 2
 
-                for walker in range(1000):
-                    # if walker % 20000 == 0: 
-                    #     print(f"Random walker number {walker}")
-                        
+                for walker in range(1000):                        
                     c_i = single_walker_stick(c_i, N, p_s[p])
 
                 c_all[:, :, i] = c_i
