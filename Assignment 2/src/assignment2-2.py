@@ -19,10 +19,25 @@ def parse_args() -> argparse.Namespace:
 
 @numba.njit
 def random_seed(seed):
+    """Function to set the seed for np.random.
+
+    Args:
+        seed (int): used seed for np.random
+    """    
     np.random.seed(seed)
 
 @numba.njit
 def get_neighbours(c: np.ndarray, N:int, location):
+    """Function to check if the neighbouring cells of a given cell is part of the cluster.
+
+    Args:
+        c (np.ndarray): array of the grid
+        N (int): size of the grid
+        location (tuple): coordinates of the cell
+
+    Returns:
+        tuple: values of the neighbouring cells
+    """    
     y, x = location
 
     top = c[y - 1, x] if y > 0 else 0
@@ -34,6 +49,16 @@ def get_neighbours(c: np.ndarray, N:int, location):
 
 @numba.njit
 def get_new_location(c, location, N):
+    """Function to get the new location of the random walker.
+
+    Args:
+        c (np.ndarray): array of the grid
+        location (tuple): coordinates of the cell
+        N (int): size of the grid
+
+    Returns:
+        tuple: coordinates of the new location
+    """    
     y, x = location
     directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
     allowed_locations = []
@@ -66,6 +91,15 @@ def get_new_location(c, location, N):
 
 @numba.njit
 def single_walker(c:np.ndarray, N:int) -> np.ndarray:
+    """Function to simulate a single walker, without sticking.
+
+    Args:
+        c (np.ndarray): array of the grid
+        N (int): size of the grid
+
+    Returns:
+        np.ndarray: Final grid after the walker has either stuck to the cluster or has been removed from the grid
+    """
     # Generate walker on random point at the top of the grid
     location = (0, np.random.randint(0, N))
     y, x = location
@@ -92,6 +126,16 @@ def single_walker(c:np.ndarray, N:int) -> np.ndarray:
 
 @numba.njit
 def single_walker_stick(c:np.ndarray, N:int, p_s:float) -> np.ndarray:
+    """Function to simulate a single walker, with sticking.
+
+    Args:
+        c (np.ndarray): array of the grid
+        N (int): size of the grid
+        p_s (float): sticking probability
+
+    Returns:
+        np.ndarray: Final grid after the walker has either stuck to the cluster or has been removed from the grid
+    """
     # Generate walker on random point at the top of the grid
     location = (0, np.random.randint(0, N))
     y, x = location
