@@ -39,12 +39,14 @@ def _step_cell(
 
     reaction = old_state[i, j, 0] * old_state[i, j, 1] ** 2
 
-    state[i, j, 0] = old_state[i, j, 0] + (
-        Du * Lu - reaction + f * (1 - old_state[i, j, 0])
-    ) * dt
-    state[i, j, 1] = old_state[i, j, 1] + (
-        Dv * Lv + reaction - (f + k) * old_state[i, j, 1]
-    ) * dt
+    state[i, j, 0] = (
+        old_state[i, j, 0]
+        + (Du * Lu - reaction + f * (1 - old_state[i, j, 0])) * dt
+    )
+    state[i, j, 1] = (
+        old_state[i, j, 1]
+        + (Dv * Lv + reaction - (f + k) * old_state[i, j, 1]) * dt
+    )
 
 
 class BaseGrid:
@@ -119,8 +121,13 @@ class BaseGrid:
             wrapping.
 
         """
-        self._state[top_row:bottom_row + 1, left_column:right_column + 1] = 0
-        self._sinks[top_row:bottom_row + 1, left_column:right_column + 1] = True
+        self._state[
+            top_row:bottom_row + 1, left_column:right_column + 1
+        ] = 0
+        self._sinks[
+            top_row:bottom_row + 1,
+            left_column:right_column + 1,
+        ] = True
 
     @property
     def state(self) -> np.ndarray:
@@ -161,7 +168,9 @@ class GrayScott(BaseGrid):
             middle - half_square:middle + half_square,
             middle - half_square:middle + half_square,
             1,
-        ] = 0.25 + np.random.rand(square_size, square_size) * 0.1
+        ] = (
+            0.25 + np.random.rand(square_size, square_size) * 0.1
+        )
         self._Du = Du
         self._Dv = Dv
         self._f = f
@@ -247,7 +256,9 @@ def make_update(
 
         current_step = (frame_index + 1) * steps_per_frame
         fig.suptitle(
-            f"Gray-Scott Model: V Concentration (Step {current_step})"
+            f"Gray-Scott Model: V Concentration (Step {current_step})",
+            # fontweight="bold",
+            fontsize=16,
         )
 
         if not snapshot_saved and current_step >= snapshot_step:
@@ -305,7 +316,7 @@ if __name__ == "__main__":
             ax.set_title(
                 f"k = {k:.5f}",
                 fontsize=14,
-                fontweight="bold",
+                # fontweight="bold",
                 pad=10,
             )
             images.append(image)
@@ -313,7 +324,7 @@ if __name__ == "__main__":
         axes[i, 0].set_ylabel(
             f"f = {f:.2f}",
             fontsize=14,
-            fontweight="bold",
+            # fontweight="bold",
             rotation=0,
             labelpad=32,
             va="center",
@@ -328,7 +339,10 @@ if __name__ == "__main__":
     )
     cbar.set_label("V concentration")
 
-    fig.suptitle("Gray-Scott Model: V Concentration (Step 0)")
+    fig.suptitle(
+        "Gray-Scott Model: V Concentration (Step 0)",
+        # fontweight="bold", fontsize=16
+    )
 
     update = make_update(
         fig,
