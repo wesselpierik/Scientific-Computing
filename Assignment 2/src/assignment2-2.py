@@ -1,21 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import argparse
 import numba
 
 from plots import rcCustom, rcCustom_wide
-
-def parse_args() -> argparse.Namespace:
-    """Function to parse the command line arguments.
-
-    Returns:
-        argparse.Namespace: namespace containing the parsed arguments
-    """    
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "option", help="Determine the code to run", choices=["C", "D"]
-    )
-    return parser.parse_args()
 
 @numba.njit
 def random_seed(seed):
@@ -174,104 +161,106 @@ def main():
     # Grid size
     N = 100
 
-    if option == "C":
+    # Question C: DLA without sticking
+
+    # Create the grid
+    c = np.zeros((N, N))
+
+    # Initial stationary point at the bottom of the grid
+    c[-1, int(N/2)] = 2
+
+    for walker in range(1000):                
+        c = single_walker(c, N)
+
+    #######
+
+    # Average over 10 iterations
+    # Array with all final clusters for each iteration
+    c_all = np.zeros((N, N, 10))
+
+    for i in range(10):
+        print(f"Iteration {i}")
         # Create the grid
-        c = np.zeros((N, N))
+        c_i = np.zeros((N, N))
 
         # Initial stationary point at the bottom of the grid
-        c[-1, int(N/2)] = 2
+        c_i[-1, int(N/2)] = 2
 
-        for walker in range(1000):                
-            c = single_walker(c, N)
+        for walker in range(1000):
+            c_i = single_walker(c_i, N)
 
-        #######
+        c_all[:, :, i] = c_i
+    
+    # Average over all iterations
+    c_avg = np.mean(c_all, axis=2)
 
-        # Average over 10 iterations
+    fig, axs = plt.subplots(nrows=1, ncols=2, layout='constrained')
+    ax = axs[0]
+    ax.imshow(c)
+    ax.set_title(f"Final cluster with size 1000")
+
+    ax = axs[1]
+    ax.imshow(c_avg)
+    ax.set_title(f"Average cluster for a cluster size of 1000, averaged over 10 iterations")
+
+    for ax in axs.ravel():
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+
+    plt.show()
+
+    # Question D: DLA with sticking
+
+    p_s = np.array([0.4, 0.6, 0.8, 1.0])
+    c_sticking_prob = []
+    tot_cluster_members = []
+
+    for p in range(len(p_s)):
         # Array with all final clusters for each iteration
         c_all = np.zeros((N, N, 10))
 
         for i in range(10):
-            print(f"Iteration {i}")
+            print(f"Iteration {i} for sticking probability {p_s[p]}")
             # Create the grid
             c_i = np.zeros((N, N))
 
             # Initial stationary point at the bottom of the grid
             c_i[-1, int(N/2)] = 2
 
-            for walker in range(1000):
-                c_i = single_walker(c_i, N)
+            for walker in range(1000):                        
+                c_i = single_walker_stick(c_i, N, p_s[p])
 
             c_all[:, :, i] = c_i
         
         # Average over all iterations
         c_avg = np.mean(c_all, axis=2)
-
-        fig, axs = plt.subplots(nrows=1, ncols=2, layout='constrained')
-        ax = axs[0]
-        ax.imshow(c)
-        ax.set_title(f"Final cluster with size 1000")
-
-        ax = axs[1]
-        ax.imshow(c_avg)
-        ax.set_title(f"Average cluster for a cluster size of 1000, averaged over 10 iterations")
-
-        for ax in axs.ravel():
-            ax.set_xlabel("x")
-            ax.set_ylabel("y")
-
-        plt.show()
-
-    elif option == "D":
-        p_s = np.array([0.4, 0.6, 0.8, 1.0])
-        c_sticking_prob = []
-        tot_cluster_members = []
-
-        for p in range(len(p_s)):
-            # Array with all final clusters for each iteration
-            c_all = np.zeros((N, N, 10))
-
-            for i in range(10):
-                print(f"Iteration {i} for sticking probability {p_s[p]}")
-                # Create the grid
-                c_i = np.zeros((N, N))
-
-                # Initial stationary point at the bottom of the grid
-                c_i[-1, int(N/2)] = 2
-
-                for walker in range(1000):                        
-                    c_i = single_walker_stick(c_i, N, p_s[p])
-
-                c_all[:, :, i] = c_i
-            
-            # Average over all iterations
-            c_avg = np.mean(c_all, axis=2)
-            tot_cluster_members.append(np.sum(c_avg) / 2)
-            c_sticking_prob.append(c_avg)
-            
-        # Show final clusters
-        fig, axs = plt.subplots(nrows=2, ncols=2, layout='constrained')
+        tot_cluster_members.append(np.sum(c_avg) / 2)
+        c_sticking_prob.append(c_avg)
         
-        ax = axs[0,0]
-        ax.imshow(c_sticking_prob[0])
-        ax.set_title(f"Sticking probability = {p_s[0]}")
+    # Show final clusters
+    fig, axs = plt.subplots(nrows=2, ncols=2, layout='constrained')
+    
+    ax = axs[0,0]
+    ax.imshow(c_sticking_prob[0])
+    ax.set_title(f"Sticking probability = {p_s[0]}")
 
-        ax = axs[0,1]
-        ax.imshow(c_sticking_prob[1])
-        ax.set_title(f"Sticking probability = {p_s[1]}")
+    ax = axs[0,1]
+    ax.imshow(c_sticking_prob[1])
+    ax.set_title(f"Sticking probability = {p_s[1]}")
 
-        ax = axs[1,0]
-        ax.imshow(c_sticking_prob[2])
-        ax.set_title(f"Sticking probability = {p_s[2]}")
+    ax = axs[1,0]
+    ax.imshow(c_sticking_prob[2])
+    ax.set_title(f"Sticking probability = {p_s[2]}")
 
-        ax = axs[1,1]
-        ax.imshow(c_sticking_prob[3])
-        ax.set_title(f"Sticking probability = {p_s[3]}")
+    ax = axs[1,1]
+    ax.imshow(c_sticking_prob[3])
+    ax.set_title(f"Sticking probability = {p_s[3]}")
 
-        for ax in axs.ravel():
-            ax.set_xlabel("x")
-            ax.set_ylabel("y")
+    for ax in axs.ravel():
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
 
-        plt.show()
+    plt.show()
 
 if __name__ == "__main__":
     main()
