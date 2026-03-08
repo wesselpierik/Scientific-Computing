@@ -26,7 +26,7 @@ The assignments D to F can be run by calling:
 ```bash
 python src/assignment1-2.py <option>
 ```
-Here the option is either *animated*, *tolerance* or *plot_timesteps* for the generation of the plots  in the report and the animation showing the time evolution of the system.
+Here the option is either *animated*, *tolerance*, *plot_timesteps* or *plot_analytic* for the generation of the plots  in the report and the animation showing the time evolution of the system.
 ### Time Independent Diffusion
 The assignments H to L can be run by calling:
 ```bash
