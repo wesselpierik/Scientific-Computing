@@ -12,7 +12,7 @@ def parse_args() -> argparse.Namespace:
     """    
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "option", help="Determine the code to run", choices=["C", "D", "D_averaged"]
+        "option", help="Determine the code to run", choices=["C", "D"]
     )
     return parser.parse_args()
 
@@ -177,50 +177,6 @@ def main():
         plt.show()
 
     elif option == "D":
-        p_s = np.array([0.4, 0.6, 0.8, 1.0])
-        c_sticking_prob = []
-        tot_cluster_members = []
-
-        for p in range(len(p_s)):
-            # Create the grid
-            c = np.zeros((N, N))
-
-            # Initial stationary point at the bottom of the grid
-            c[-1, int(N/2)] = 2
-
-            for walker in range(1000):
-                c = single_walker_stick(c, N, p_s[p])
-
-            tot_cluster_members.append(np.sum(c) / 2)
-            c_sticking_prob.append(c)
-
-        # Show final clusters
-        fig, axs = plt.subplots(nrows=2, ncols=2, layout='constrained')
-        
-        ax = axs[0,0]
-        ax.imshow(c_sticking_prob[0])
-        ax.set_title(f"Sticking probability = {p_s[0]}")
-
-        ax = axs[0,1]
-        ax.imshow(c_sticking_prob[1])
-        ax.set_title(f"Sticking probability = {p_s[1]}")
-
-        ax = axs[1,0]
-        ax.imshow(c_sticking_prob[2])
-        ax.set_title(f"Sticking probability = {p_s[2]}")
-
-        ax = axs[1,1]
-        ax.imshow(c_sticking_prob[3])
-        ax.set_title(f"Sticking probability = {p_s[3]}")
-
-        for ax in axs.ravel():
-            ax.set_xlabel("x")
-            ax.set_ylabel("y")
-
-        plt.show()
-
-
-    elif option == "D_averaged":
         p_s = np.array([0.4, 0.6, 0.8, 1.0])
         c_sticking_prob = []
         tot_cluster_members = []
