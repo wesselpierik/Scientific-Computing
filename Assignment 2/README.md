@@ -55,6 +55,10 @@ python3 src/assignment2-1.py <plot_small/plot_large>
 ```
 
 ### Assignment 2:
+To run the simulation and to get the plots for subquestions C and D:
+```bash
+python3 src/assignment2-2.py 
+```
 
 
 ### Assignment 3:
