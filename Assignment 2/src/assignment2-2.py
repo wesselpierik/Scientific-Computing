@@ -154,8 +154,6 @@ def single_walker_stick(c:np.ndarray, N:int, p_s:float) -> np.ndarray:
     return c
 
 def main(): 
-    args = parse_args()
-    option = args.option
     random_seed(0)
 
     # Grid size
