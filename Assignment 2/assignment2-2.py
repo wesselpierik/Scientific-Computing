@@ -17,6 +17,10 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 @numba.njit
+def random_seed(seed):
+    np.random.seed(seed)
+
+@numba.njit
 def get_neighbours(c: np.ndarray, N:int, location):
     y, x = location
 
@@ -29,7 +33,6 @@ def get_neighbours(c: np.ndarray, N:int, location):
 
 @numba.njit
 def get_new_location(c, location, N):
-    # np.random.seed(0)
     y, x = location
     directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
     allowed_locations = []
@@ -121,6 +124,7 @@ def single_walker_stick(c:np.ndarray, N:int, p_s:float) -> np.ndarray:
 def main(): 
     args = parse_args()
     option = args.option
+    random_seed(0)
 
     # Grid size
     N = 100
