@@ -3,7 +3,9 @@
 - src/: Source Python files:
   - src/assignment2-1.py: Plotting functionality for the the first Diffusion Limited Aggregation assignment.
   - src/assignment2-2.py: File for the Monte Carlo simulation of DLA.
+  - src/assignment2-3.py: File for the Gray-Scott simulation.
   - src/dla.py: DLA logic of the first assignment.
+  - src/gray_scott.py: The logic for the Gray-Scott models.
   - src/plots.py: Contains custom settings for plots.
   - src/utils.py: Contains several global definitions and paths.
 
@@ -51,3 +53,14 @@ and then plot using:
 ```bash
 python3 src/assignment2-1.py <plot_small/plot_large>
 ```
+
+### Assignment 2:
+
+
+### Assignment 3:
+To run the simulation and save the snapshot at timestep 50000:
+```bash
+python3 src/assignment2-3.py E
+```
+
+

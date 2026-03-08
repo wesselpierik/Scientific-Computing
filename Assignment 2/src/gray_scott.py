@@ -1,3 +1,15 @@
+"""Gray-Scott reaction-diffusion simulation on a 2D grid.
+
+Group:        10
+Course:       Scientific Computing
+
+Description:
+-----------
+Logic for the simulation of the Gray-Scott reaction-diffusion system
+on a 2D grid. The simulation is wrapped in the GrayScott class, allowing
+for easy stepping of the evolution.
+"""
+
 import numpy as np
 import numba
 

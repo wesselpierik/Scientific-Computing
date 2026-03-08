@@ -1,3 +1,16 @@
+"""Assignment 2: Gray-Scott Simulation and Visualization
+
+Group:         10
+Course:        Scientific Computing
+
+Description:
+-----------
+This module provides tools for simulating and visualizing the Gray-Scott
+reaction-diffusion systems. It utilizes the `GrayScott` class to represent
+and evolve the concentration of two chemicals (U and V) on a 2D grid.
+"""
+
+import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
@@ -70,7 +83,7 @@ def make_update(
     return update
 
 
-if __name__ == "__main__":
+def assignment_e():
     grid_size = 200
 
     fs = [0.02, 0.04, 0.06, 0.08]
@@ -147,7 +160,7 @@ if __name__ == "__main__":
         snapshot_step,
     )
 
-    anim = FuncAnimation(
+    _ = FuncAnimation(
         fig,
         update,
         frames=total_frames,
@@ -157,3 +170,24 @@ if __name__ == "__main__":
 
     plt.show()
     plt.close(fig)
+
+
+def parse_args() -> argparse.Namespace:
+    """Function to parse the command line arguments.
+
+    Returns:
+        argparse.Namespace: namespace containing the parsed arguments
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "option", help="Determine the code to run", choices=["E"]
+    )
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    option = args.option
+
+    if option == "E":
+        assignment_e()
