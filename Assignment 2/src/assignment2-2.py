@@ -5,7 +5,7 @@ import numba
 from plots import rcCustom, rcCustom_wide
 
 @numba.njit
-def random_seed(seed):
+def random_seed(seed:int):
     """Function to set the seed for np.random.
 
     Args:
@@ -14,13 +14,13 @@ def random_seed(seed):
     np.random.seed(seed)
 
 @numba.njit
-def get_neighbours(c: np.ndarray, N:int, location):
+def get_neighbours(c:np.ndarray, location:tuple, N:int):
     """Function to check if the neighbouring cells of a given cell is part of the cluster.
 
     Args:
         c (np.ndarray): array of the grid
-        N (int): size of the grid
         location (tuple): coordinates of the cell
+        N (int): size of the grid
 
     Returns:
         tuple: values of the neighbouring cells
@@ -35,7 +35,7 @@ def get_neighbours(c: np.ndarray, N:int, location):
     return int(top), int(bottom), int(right), int(left)
 
 @numba.njit
-def get_new_location(c, location, N):
+def get_new_location(c:np.ndarray, location:tuple, N:int):
     """Function to get the new location of the random walker.
 
     Args:
@@ -77,7 +77,7 @@ def get_new_location(c, location, N):
     return new_location
 
 @numba.njit
-def single_walker(c:np.ndarray, N:int) -> np.ndarray:
+def single_walker(c:np.ndarray, N:int):
     """Function to simulate a single walker, without sticking.
 
     Args:
@@ -96,7 +96,7 @@ def single_walker(c:np.ndarray, N:int) -> np.ndarray:
         c[y, x] = 0
 
         # Get values of neighbours
-        neighbour_val = get_neighbours(c, N, location)
+        neighbour_val = get_neighbours(c, location, N)
 
         if 2 in neighbour_val:
             c[y, x] = 2
@@ -112,7 +112,7 @@ def single_walker(c:np.ndarray, N:int) -> np.ndarray:
     return c
 
 @numba.njit
-def single_walker_stick(c:np.ndarray, N:int, p_s:float) -> np.ndarray:
+def single_walker_stick(c:np.ndarray, N:int, p_s:float):
     """Function to simulate a single walker, with sticking.
 
     Args:
@@ -132,7 +132,7 @@ def single_walker_stick(c:np.ndarray, N:int, p_s:float) -> np.ndarray:
         c[y, x] = 0
 
         # Get values of neighbours
-        neighbour_val = get_neighbours(c, N, location)
+        neighbour_val = get_neighbours(c, location, N)
 
         if 2 in neighbour_val:
             if np.random.rand() <= p_s:
