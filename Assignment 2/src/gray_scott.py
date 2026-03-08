@@ -10,6 +10,20 @@ def laplacian(
     k: int,
     grid_size: int,
 ) -> float:
+    """Compute the 2D five-point Laplacian with periodic boundaries.
+
+    Args:
+        state: 3D concentration array with shape
+            ``(grid_size, grid_size, 2)``.
+        i: Row index of the cell.
+        j: Column index of the cell.
+        k: Species channel index (``0`` for U, ``1`` for V).
+        grid_size: Side length of the square grid.
+
+    Returns:
+        Discrete Laplacian value for ``state[i, j, k]``.
+
+    """
     return (
         state[i, (j + 1) % grid_size, k]
         + state[i, (j - 1), k]
@@ -32,6 +46,21 @@ def _step_cell(
     dt: float,
     grid_size: int,
 ) -> None:
+    """Advance one grid cell by one Gray-Scott time step.
+
+    Args:
+        old_state: Previous concentration state for both species.
+        state: Output state array where updated values are written.
+        i: Row index of the cell to update.
+        j: Column index of the cell to update.
+        Du: Diffusion coefficient for species U.
+        Dv: Diffusion coefficient for species V.
+        f: Feed rate parameter.
+        k: Kill rate parameter.
+        dt: Time step size.
+        grid_size: Side length of the square grid.
+
+    """
     Lu = laplacian(old_state, i, j, 0, grid_size)
     Lv = laplacian(old_state, i, j, 1, grid_size)
 
@@ -144,6 +173,8 @@ class BaseGrid:
 
 
 class GrayScott(BaseGrid):
+    """Gray-Scott reaction-diffusion simulator on a periodic 2D grid."""
+
     def __init__(
         self,
         grid_size: int,
@@ -153,6 +184,21 @@ class GrayScott(BaseGrid):
         Du=0.16,
         Dv=0.08,
     ) -> None:
+        """Initialize a Gray-Scott simulation with a seeded V patch.
+
+        Args:
+            grid_size: Side length of the square simulation grid.
+            f: Feed rate parameter in the Gray-Scott model.
+            k: Kill rate parameter in the Gray-Scott model.
+            square_size: Side length of the initial center perturbation.
+            Du: Diffusion coefficient for species U.
+            Dv: Diffusion coefficient for species V.
+
+        Raises:
+            ValueError: Propagated from ``BaseGrid`` when
+                ``grid_size <= 2``.
+
+        """
         super().__init__(grid_size)
         self._new_state = np.zeros((grid_size, grid_size, 2))
         self._old_state = np.zeros((grid_size, grid_size, 2))
@@ -176,9 +222,23 @@ class GrayScott(BaseGrid):
 
     @property
     def state(self) -> np.ndarray:
+        """Return the latest computed Gray-Scott concentration field.
+
+        Returns:
+            3D array of shape ``(grid_size, grid_size, 2)`` where channel 0
+            is U and channel 1 is V.
+
+        """
         return self._new_state
 
     def step(self) -> float:
+        """Advance the full grid by one time step.
+
+        Returns:
+            Maximum absolute per-cell change over both species during the
+            update.
+
+        """
         diff = self.numba_step(
             self._old_state,
             self._new_state,
@@ -205,6 +265,22 @@ class GrayScott(BaseGrid):
         dt: float,
         grid_size: int,
     ) -> float:
+        """Update all cells for one time step and report max change.
+
+        Args:
+            old_state: Previous concentration state for both species.
+            new_state: Output array that receives updated concentrations.
+            Du: Diffusion coefficient for species U.
+            Dv: Diffusion coefficient for species V.
+            f: Feed rate parameter.
+            k: Kill rate parameter.
+            dt: Time step size.
+            grid_size: Side length of the square grid.
+
+        Returns:
+            Maximum absolute update magnitude across all cells and species.
+
+        """
         max_diff = 0.0
         for i in numba.prange(grid_size):
             local_max = 0.0

@@ -11,9 +11,34 @@ def make_update(
     steps_per_frame: int,
     snapshot_step: int,
 ):
+    """Create the animation callback used by ``FuncAnimation``.
+
+    Args:
+        fig: Matplotlib figure used for title updates and snapshot export.
+        simulations_by_f: Nested list of ``GrayScott`` simulations grouped by
+            feed-rate row.
+        images_by_f: Nested list of image artists corresponding to
+            ``simulations_by_f``.
+        steps_per_frame: Number of simulation steps computed per animation
+            frame.
+        snapshot_step: First simulation step at which a PNG snapshot is saved.
+
+    Returns:
+        A frame update function compatible with ``FuncAnimation``.
+
+    """
     snapshot_saved = False
 
     def update(frame_index: int):
+        """Advance simulations, refresh artists, and optionally save snapshot.
+
+        Args:
+            frame_index: Zero-based animation frame index.
+
+        Returns:
+            Tuple of updated image artists for Matplotlib redraw.
+
+        """
         nonlocal snapshot_saved
 
         for _ in range(steps_per_frame):
