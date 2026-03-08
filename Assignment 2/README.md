@@ -2,8 +2,10 @@
 ## Structure:
 - src/: Source Python files:
   - src/assignment2-1.py: Plotting functionality for the the first Diffusion Limited Aggregation assignment.
+  - src/assignment2-2.py: File for the Monte Carlo simulation of DLA.
   - src/dla.py: DLA logic of the first assignment.
-  - src/utils.py: Contains several global definitions and paths
+  - src/plots.py: Contains custom settings for plots.
+  - src/utils.py: Contains several global definitions and paths.
 
 ### Data files:
   - data/no_mp.csv: Timing results of experimenting with a grid of 100 by 100 and using no parallelization through either numba or multiprocessing.
