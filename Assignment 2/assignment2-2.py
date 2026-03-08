@@ -4,6 +4,8 @@ import pandas as pd
 import argparse
 import numba
 
+from plots import rcCustom, rcCustom_wide
+
 def parse_args() -> argparse.Namespace:
     """Function to parse the command line arguments.
 
