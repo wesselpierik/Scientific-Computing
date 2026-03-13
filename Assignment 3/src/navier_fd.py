@@ -7,24 +7,14 @@ Description:
 TODO:
 """
 
-from dataclasses import dataclass
 from itertools import product
 
 import matplotlib.pyplot as plt
 import numba
 import numpy as np
-from numba import float64
-from numba.experimental import jitclass
-
-grid_spec = [
-    ("u", float64[:, :]),
-    ("v", float64[:, :]),
-    ("p", float64[:, :]),
-    ("rohr", float64[:, :]),
-]
+from matplotlib import animation, cm
 
 
-@jitclass(grid_spec)  # pyright: ignore[reportCallIssue]
 class Grids:
     def __init__(
         self,
@@ -32,11 +22,13 @@ class Grids:
         v: np.ndarray[tuple[int, int], np.dtype[np.float64]],
         p: np.ndarray[tuple[int, int], np.dtype[np.float64]],
         rohr: np.ndarray[tuple[int, int], np.dtype[np.float64]],
+        rohr_count: np.ndarray[tuple[int, int], np.dtype[np.float64]],
     ) -> None:
         self.u = u
         self.p = p
         self.v = v
         self.rohr = rohr
+        self.rohr_count = rohr_count
 
 
 # Karman street
@@ -45,22 +37,28 @@ rohr_x = 0.2
 rohr_y = 0.2
 rohr_rad = 0.05
 dim_y = 0.41
-start_velocity = 5
+start_velocity = 4
 
 # Discretization parameters
-ds = 0.01
-dt = 0.1
+ds = 0.005
+dt = 0.0001
 nx = int(dim_x / ds) + 1
 ny = int(dim_y / ds) + 1
 
 # Parameters
 rho = 1
-nu = 1
+nu = 0.01
 
 
 def init_grids() -> Grids:
     # Initialisation
     u = np.zeros((ny, nx))
+
+    # Parabolic starting velocity
+    def parabole(x: np.ndarray) -> np.ndarray:
+        return 1 - ((x * 2 / dim_y) - 1) ** 2
+
+    u[:, 0] = parabole(np.arange(ny) * ds)
     v = np.zeros_like(u)
     p = np.zeros_like(u)
     rohr = np.zeros_like(u)
@@ -68,19 +66,73 @@ def init_grids() -> Grids:
         rohr[row, column] = int(
             (row * ds - rohr_y) ** 2 + (column * ds - rohr_x) ** 2 > rohr_rad**2,
         )
-    return Grids(u, v, p, rohr)
+    rohr_count = (
+        np.ones((ny - 2, nx - 2)) * 4
+        - rohr[1:-1, 2:]
+        - rohr[1:-1, :-2]
+        - rohr[2:, 1:-1]
+        - rohr[:-2, 1:-1]
+    )
+    return Grids(u, v, p, rohr, rohr_count)
 
 
 def update(grids: Grids) -> None:
-    _update(grids)
+    _update(grids.u, grids.p, grids.v, grids.rohr, grids.rohr_count)
 
 
-# @numba.njit(cache=True)
-def _update(grids: Grids) -> None:
-    u = grids.u
-    v = grids.v
-    p = grids.p
-    rohr = grids.rohr
+# @numba.njit(cache=True, fastmath=True)
+def _update_p(
+    u: np.ndarray,
+    v: np.ndarray,
+    p: np.ndarray,
+    rohr: np.ndarray,
+    rohr_count: np.ndarray,
+) -> None:
+    v_diff_x = (v[1:-1, 2:] - v[1:-1, :-2]) / (2 * ds)
+    u_diff_x = (u[1:-1, 2:] - u[1:-1, :-2]) / (2 * ds)
+    v_diff_y = (v[2:, 1:-1] - v[:-2, 1:-1]) / (2 * ds)
+    u_diff_y = (u[2:, 1:-1] - u[:-2, 1:-1]) / (2 * ds)
+    p_change = (
+        rho
+        * ds
+        * ds
+        / 4
+        * (
+            (1 / dt) * (u_diff_x + v_diff_y)
+            - u_diff_x * u_diff_x
+            - 2 * u_diff_y * v_diff_x
+            - v_diff_y * v_diff_y
+        )
+    )
+    # Iterate pressure
+    for _ in range(50):
+        p[1:-1, 1:-1] = (
+            p[1:-1, 2:] * rohr[1:-1, 2:]
+            + p[1:-1, :-2] * rohr[1:-1, :-2]
+            + p[2:, 1:-1] * rohr[2:, 1:-1]
+            + p[:-2, 1:-1] * rohr[:-2, 1:-1]
+            + rohr_count * p[1:-1, 1:-1]
+        ) / 4
+        p[1:-1, 1:-1] -= p_change
+
+        # # Strong Neumann
+        p[0] = p[1]
+        p[-1] = p[-2]
+        p[:, 0] = p[:, 1]
+
+        # Strong Dirichlet
+        p[:, -1] = 0
+    p *= rohr
+
+
+# @numba.njit(cache=True, fastmath=True)
+def _update(
+    u: np.ndarray,
+    p: np.ndarray,
+    v: np.ndarray,
+    rohr: np.ndarray,
+    rohr_count: np.ndarray,
+) -> None:
     new_u = u[1:-1, 1:-1].copy()
 
     ds_sqr = ds**2
@@ -109,20 +161,11 @@ def _update(grids: Grids) -> None:
     )
 
     u[1:-1, 1:-1] = new_u
-    # Strong Dirichlet
-    u[0] = 0
-    u[-1] = 0
-    u[:, 0] = start_velocity
 
     # Strong Neumann
     u[:, -1] = u[:, -2]
 
     v[1:-1, 1:-1] = new_v
-
-    # Strong Dirichlet
-    v[0] = 0
-    v[-1] = 0
-    v[:, 0] = 0
 
     # Strong Neumann
     v[:, -1] = v[:, -2]
@@ -130,48 +173,68 @@ def _update(grids: Grids) -> None:
     # Rohr
     u *= rohr
     v *= rohr
-
-    v_diff_x = (v[1:-1, 2:] - v[1:-1, :-2]) / (2 * ds)
-    u_diff_x = (u[1:-1, 2:] - u[1:-1, :-2]) / (2 * ds)
-    v_diff_y = (v[2:, 1:-1] - v[:-2, 1:-1]) / (2 * ds)
-    u_diff_y = (u[2:, 1:-1] - u[:-2, 1:-1]) / (2 * ds)
-    p_change = (
-        rho
-        * ds_sqr
-        * ds_sqr
-        / (4 * ds_sqr)
-        * (
-            (1 / dt) * (u_diff_x + v_diff_y)
-            - u_diff_x * u_diff_x
-            - 2 * u_diff_y * v_diff_x
-            - v_diff_y * v_diff_y
-        )
-    )
-    # Iterate pressure
-    for _ in range(0):
-        p[1:-1, 1:-1] = (
-            ds_sqr * (p[1:-1, 2:] + p[1:-1, :-2])
-            + (p[2:, 1:-1] + p[:-2, 1:-1]) / 4 * ds_sqr
-        )
-        p[1:-1, 1:-1] -= p_change
-
-        # Strong Neumann
-        p[0] = p[1]
-        p[-1] = p[-2]
-        p[:, 0] = p[:, 1]
-
-        # Strong Dirichlet
-        p[:, -1] = 0
+    _update_p(u, v, p, rohr, rohr_count)
 
 
-def main() -> None:
+def animate_flow(num_frames: int = 100, interval: int = 1) -> None:  # pyright: ignore[reportUnusedFunction]
+    """Create an animated streamplot of the Navier-Stokes flow using FuncAnimation.
+
+    Args:
+        num_frames: Number of animation frames to generate
+        interval: Delay between frames in milliseconds
+    """
     grids = init_grids()
-    update(grids)
     x = np.arange(nx) * ds
     y = np.arange(ny) * ds
     x, y = np.meshgrid(x, y)
-    plt.streamplot(x, y, grids.u, grids.v)
+
+    fig, ax = plt.subplots(figsize=(12, 4))
+
+    def update_animation(frame: int):
+        """Update function for animation."""
+        update(grids)
+
+        # Clear and redraw streamplot since StreamplotSet cannot be updated directly
+        ax.clear()  # type: ignore[reportAttributeAccessIssue]
+        ax.contourf(x, y, np.sqrt(grids.u**2 + grids.v**2), alpha=0.5, cmap=cm.viridis)  # pyright: ignore[reportAttributeAccessIssue]
+        # ax.contourf(x, y, grids.v, alpha=0.5, cmap=cm.viridis)  # pyright: ignore[reportAttributeAccessIssue]
+
+        ax.set_xlim(0, dim_x)  # type: ignore[reportAttributeAccessIssue]
+        ax.set_ylim(0, dim_y)  # type: ignore[reportAttributeAccessIssue]
+        ax.set_xlabel("x")  # type: ignore[reportAttributeAccessIssue]
+        ax.set_ylabel("y")  # type: ignore[reportAttributeAccessIssue]
+        ax.set_title(f"Navier-Stokes Flow (Frame {frame + 1}/{num_frames})")  # type: ignore[reportAttributeAccessIssue]
+
+    anim = animation.FuncAnimation(
+        fig,
+        update_animation,  # pyright: ignore[reportArgumentType]
+        frames=num_frames,
+        interval=interval,
+        repeat=True,
+    )
     plt.show()
+
+
+def main() -> None:
+    animate_flow()
+    # grids = init_grids()
+    # while True:
+    #     for _ in range(10):
+    #         update(grids)
+    #     x = np.linspace(0, 2.2, nx)
+    #     y = np.linspace(0, 0.41, ny)
+    #     X, Y = np.meshgrid(x, y)
+    #     fig = plt.figure(figsize=(11, 7), dpi=100)
+    #     # plotting the pressure field as a contour
+    #     plt.contourf(X, Y, grids.p, alpha=0.5, cmap=cm.viridis)  # pyright: ignore[reportAttributeAccessIssue]
+    #     plt.colorbar()
+    #     # plotting the pressure field outlines
+    #     plt.contour(X, Y, grids.p, cmap=cm.viridis)  # pyright: ignore[reportAttributeAccessIssue]
+    #     # plotting velocity field
+    #     plt.quiver(X[::2, ::2], Y[::2, ::2], grids.u[::2, ::2], grids.v[::2, ::2])
+    #     plt.xlabel("X")
+    #     plt.ylabel("Y")
+    #     plt.show()
 
 
 if __name__ == "__main__":
