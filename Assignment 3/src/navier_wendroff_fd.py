@@ -10,7 +10,6 @@ TODO:
 from itertools import product
 
 import matplotlib.pyplot as plt
-import numba
 import numpy as np
 from matplotlib import animation, cm
 
@@ -80,7 +79,6 @@ def update(grids: Grids) -> None:
     _update(grids.u, grids.p, grids.v, grids.rohr, grids.rohr_count)
 
 
-# @numba.njit(cache=True, fastmath=True)
 def _update_p(
     u: np.ndarray,
     v: np.ndarray,
@@ -125,7 +123,6 @@ def _update_p(
     p *= rohr
 
 
-# @numba.njit(cache=True, fastmath=True)
 def _update(
     u: np.ndarray,
     p: np.ndarray,
@@ -136,16 +133,30 @@ def _update(
     new_u = u[1:-1, 1:-1].copy()
 
     ds_sqr = ds**2
+    dt_sqr = dt**2
 
     dtds = dt / ds
-    new_u -= u[1:-1, 1:-1] * (u[1:-1, 1:-1] - u[1:-1, :-2]) * dtds
-    new_u -= v[1:-1, 1:-1] * (u[1:-1, 1:-1] - u[:-2, 1:-1]) * dtds
+    dtdsds = dt / (2 * ds)
+    new_u -= u[1:-1, 1:-1] * (u[1:-1, 2:] - u[1:-1, :-2]) * dtdsds
+    new_u -= v[1:-1, 1:-1] * (u[2:, 1:-1] - u[:-2, 1:-1]) * dtdsds
     new_u -= dtds / (2 * rho) * (p[1:-1, 2:] - p[1:-1, :-2])
     new_u += (
         nu
         * dt
         / ds_sqr
         * (-4 * u[1:-1, 1:-1] + u[1:-1, 2:] + u[1:-1, :-2] + u[2:, 1:-1] + u[:-2, 1:-1])
+    )
+    new_u += (
+        u[1:-1, 1:-1]
+        * u[1:-1, 1:-1]
+        * (dt_sqr / (2 * ds_sqr))
+        * (u[1:-1, 2:] - 2 * u[1:-1, 1:-1] + u[1:-1, :-2])
+    )
+    new_u += (
+        v[1:-1, 1:-1]
+        * v[1:-1, 1:-1]
+        * (dt_sqr / (2 * ds_sqr))
+        * (u[2:, 1:-1] - 2 * u[1:-1, 1:-1] + u[:-2, 1:-1])
     )
 
     new_v = v[1:-1, 1:-1].copy()
