@@ -4,7 +4,8 @@ Group:        10
 Course:       Scientific Computing
 
 Description:
-TODO:
+Uses a Lax-Wendroff finite differnce scheme to solve the Navier stokes equations
+in a Karman street.
 """
 
 from itertools import product
@@ -50,6 +51,17 @@ nu = 0.005
 
 
 def init_grids() -> Grids:
+    """Initialize the computational grids for Navier-Stokes simulation.
+
+    Sets up velocity components (u, v), pressure (p), obstacle mask (rohr), and
+    obstacle neighbor counts. Initializes u-velocity with parabolic inlet profile
+    and creates a circular obstacle (cylinder) in the domain.
+
+    Returns:
+        Grids: Object containing u, v, p velocity and pressure arrays, plus
+               rohr (obstacle mask) and rohr_count (neighbor counter for averaging).
+
+    """
     # Initialisation
     u = np.zeros((ny, nx))
 
@@ -76,6 +88,17 @@ def init_grids() -> Grids:
 
 
 def update(grids: Grids) -> None:
+    """Perform one timestep of the Navier-Stokes solution using Lax-Wendroff scheme.
+
+    Updates velocity fields (u, v) and pressure (p) in-place by advancing the
+    Navier-Stokes equations by one time step. Enforces boundary conditions and
+    respects obstacle geometry.
+
+    Args:
+        grids: Grids object containing u, v, p velocity/pressure arrays and
+               rohr obstacle mask with rohr_count for pressure averaging.
+
+    """
     _update(grids.u, grids.p, grids.v, grids.rohr, grids.rohr_count)
 
 
@@ -86,6 +109,21 @@ def _update_p(
     rohr: np.ndarray,
     rohr_count: np.ndarray,
 ) -> None:
+    """Update pressure field using pressure-Poisson equation with iterative solver.
+
+    Computes pressure gradients from velocity divergence using finite differences
+    and iteratively solves the pressure-Poisson equation via Gauss-Seidel relaxation.
+    Enforces Neumann boundary conditions at inlet/outlet/walls and Dirichlet at exit.
+    Pressure is zeroed inside the obstacle.
+
+    Args:
+        u: x-component of velocity (ny x nx array).
+        v: y-component of velocity (ny x nx array).
+        p: Pressure field (ny x nx array) - modified in-place.
+        rohr: Binary obstacle mask (1=fluid, 0=obstacle).
+        rohr_count: Pre-computed count of fluid neighbors for pressure averaging.
+
+    """
     v_diff_x = (v[1:-1, 2:] - v[1:-1, :-2]) / (2 * ds)
     u_diff_x = (u[1:-1, 2:] - u[1:-1, :-2]) / (2 * ds)
     v_diff_y = (v[2:, 1:-1] - v[:-2, 1:-1]) / (2 * ds)
@@ -130,6 +168,21 @@ def _update(
     rohr: np.ndarray,
     rohr_count: np.ndarray,
 ) -> None:
+    """Update velocity fields using Lax-Wendroff finite difference scheme.
+
+    Advances both u and v velocity components by one time step using the
+    Lax-Wendroff scheme with central differences in space. Includes convective,
+    pressure-gradient, and viscous terms. Applies strong Neumann boundary conditions
+    at exits and zeros velocities inside the obstacle.
+
+    Args:
+        u: x-component of velocity (ny x nx array) - modified in-place.
+        p: Pressure field (ny x nx array).
+        v: y-component of velocity (ny x nx array) - modified in-place.
+        rohr: Binary obstacle mask (1=fluid, 0=obstacle).
+        rohr_count: Pre-computed count of fluid neighbors (used by _update_p).
+
+    """
     new_u = u[1:-1, 1:-1].copy()
 
     ds_sqr = ds**2
@@ -179,11 +232,15 @@ def _update(
 
 
 def animate_flow(num_frames: int = 100, interval: int = 1) -> None:  # pyright: ignore[reportUnusedFunction]
-    """Create an animated streamplot of the Navier-Stokes flow using FuncAnimation.
+    """Create an animated visualization of the Navier-Stokes flow field evolution.
+
+    Simulates and displays the time-dependent flow around a circular obstacle using
+    matplotlib FuncAnimation. Each frame advances the simulation by 7 timesteps
+    and displays flow speed as a heatmap.
 
     Args:
-        num_frames: Number of animation frames to generate
-        interval: Delay between frames in milliseconds
+        num_frames: Number of animation frames to generate (default: 100).
+        interval: Delay between frames in milliseconds (default: 1).
 
     """
     grids = init_grids()
@@ -205,9 +262,6 @@ def animate_flow(num_frames: int = 100, interval: int = 1) -> None:  # pyright: 
 
         # Clear and redraw streamplot since StreamplotSet cannot be updated directly
         ax.clear()  # type: ignore[reportAttributeAccessIssue]
-        # ax.contourf(x, y, np.sqrt(grids.u**2 + grids.v**2), alpha=0.5, cmap=cm.viridis)  # pyright: ignore[reportAttributeAccessIssue]
-
-        # ax.contourf(x, y, grids.v, alpha=0.5, cmap=cm.viridis)  # pyright: ignore[reportAttributeAccessIssue]
         ax.imshow(np.sqrt(grids.u**2 + grids.v**2), extent=(0, dim_x, 0, dim_y))
 
         ax.set_xlim(0, dim_x)  # type: ignore[reportAttributeAccessIssue]
@@ -227,26 +281,13 @@ def animate_flow(num_frames: int = 100, interval: int = 1) -> None:  # pyright: 
 
 
 def main() -> None:
+    """Entry point for the Navier-Stokes simulation.
+
+    Prints the Reynolds number of the flow and launches the interactive animation.
+
+    """
     print(f"Reynolds: {start_velocity * rohr_rad * 2 / nu}")
     animate_flow()
-    # grids = init_grids()
-    # while True:
-    #     for _ in range(10):
-    #         update(grids)
-    #     x = np.linspace(0, 2.2, nx)
-    #     y = np.linspace(0, 0.41, ny)
-    #     X, Y = np.meshgrid(x, y)
-    #     fig = plt.figure(figsize=(11, 7), dpi=100)
-    #     # plotting the pressure field as a contour
-    #     plt.contourf(X, Y, grids.p, alpha=0.5, cmap=cm.viridis)  # pyright: ignore[reportAttributeAccessIssue]
-    #     plt.colorbar()
-    #     # plotting the pressure field outlines
-    #     plt.contour(X, Y, grids.p, cmap=cm.viridis)  # pyright: ignore[reportAttributeAccessIssue]
-    #     # plotting velocity field
-    #     plt.quiver(X[::2, ::2], Y[::2, ::2], grids.u[::2, ::2], grids.v[::2, ::2])
-    #     plt.xlabel("X")
-    #     plt.ylabel("Y")
-    #     plt.show()
 
 
 if __name__ == "__main__":
