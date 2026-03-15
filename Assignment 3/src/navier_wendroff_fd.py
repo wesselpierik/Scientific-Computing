@@ -36,7 +36,7 @@ rohr_x = 0.2
 rohr_y = 0.2
 rohr_rad = 0.05
 dim_y = 0.41
-start_velocity = 32
+start_velocity = 50
 
 # Discretization parameters
 ds = 0.01
@@ -46,7 +46,7 @@ ny = int(dim_y / ds) + 1
 
 # Parameters
 rho = 1
-nu = 0.01
+nu = 0.005
 
 
 def init_grids() -> Grids:
@@ -139,6 +139,7 @@ def _update(
 
     dtds = dt / ds
     dtdss = dt / (2 * ds)
+
     new_u -= u[1:-1, 1:-1] * (u[1:-1, 2:] - u[1:-1, :-2]) * dtdss
     new_u -= v[1:-1, 1:-1] * (u[2:, 1:-1] - u[:-2, 1:-1]) * dtdss
     new_u -= dtds / (2 * rho) * (p[1:-1, 2:] - p[1:-1, :-2])
@@ -159,7 +160,7 @@ def _update(
     v_delta_y = v[2:, 1:-1] + v[:-2, 1:-1] - 2 * v[1:-1, 1:-1]
     new_v += nu * dt / ds_sqr * (v_delta_x + v_delta_y)
     new_v += u_sqr * (dt_sqr / (2 * ds_sqr)) * (v_delta_x)
-    new_u += v_sqr * (dt_sqr / (2 * ds_sqr)) * (v_delta_y)
+    new_v += v_sqr * (dt_sqr / (2 * ds_sqr)) * (v_delta_y)
 
     u[1:-1, 1:-1] = new_u
 
