@@ -11,7 +11,7 @@ from itertools import product
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import animation, cm
+from matplotlib import animation
 
 
 class Grids:
@@ -36,7 +36,7 @@ rohr_x = 0.2
 rohr_y = 0.2
 rohr_rad = 0.05
 dim_y = 0.41
-start_velocity = 4
+start_velocity = 32
 
 # Discretization parameters
 ds = 0.01
@@ -55,7 +55,7 @@ def init_grids() -> Grids:
 
     # Parabolic starting velocity
     def parabole(x: np.ndarray) -> np.ndarray:
-        return 1 - ((x * 2 / dim_y) - 1) ** 2
+        return (1 - ((x * 2 / dim_y) - 1) ** 2) * start_velocity
 
     u[:, 0] = parabole(np.arange(ny) * ds)
     v = np.zeros_like(u)
@@ -134,54 +134,32 @@ def _update(
 
     ds_sqr = ds**2
     dt_sqr = dt**2
+    u_sqr = u[1:-1, 1:-1] * u[1:-1, 1:-1]
+    v_sqr = v[1:-1, 1:-1] * v[1:-1, 1:-1]
 
     dtds = dt / ds
-    dtdsds = dt / (2 * ds)
-    new_u -= u[1:-1, 1:-1] * (u[1:-1, 2:] - u[1:-1, :-2]) * dtdsds
-    new_u -= v[1:-1, 1:-1] * (u[2:, 1:-1] - u[:-2, 1:-1]) * dtdsds
+    dtdss = dt / (2 * ds)
+    new_u -= u[1:-1, 1:-1] * (u[1:-1, 2:] - u[1:-1, :-2]) * dtdss
+    new_u -= v[1:-1, 1:-1] * (u[2:, 1:-1] - u[:-2, 1:-1]) * dtdss
     new_u -= dtds / (2 * rho) * (p[1:-1, 2:] - p[1:-1, :-2])
-    new_u += (
-        nu
-        * dt
-        / ds_sqr
-        * (-4 * u[1:-1, 1:-1] + u[1:-1, 2:] + u[1:-1, :-2] + u[2:, 1:-1] + u[:-2, 1:-1])
-    )
-    new_u += (
-        u[1:-1, 1:-1]
-        * u[1:-1, 1:-1]
-        * (dt_sqr / (2 * ds_sqr))
-        * (u[1:-1, 2:] - 2 * u[1:-1, 1:-1] + u[1:-1, :-2])
-    )
-    new_u += (
-        v[1:-1, 1:-1]
-        * v[1:-1, 1:-1]
-        * (dt_sqr / (2 * ds_sqr))
-        * (u[2:, 1:-1] - 2 * u[1:-1, 1:-1] + u[:-2, 1:-1])
-    )
+
+    u_delta_x = u[1:-1, 2:] + u[1:-1, :-2] - 2 * u[1:-1, 1:-1]
+    u_delta_y = u[2:, 1:-1] + u[:-2, 1:-1] - 2 * u[1:-1, 1:-1]
+    new_u += nu * dt / ds_sqr * (u_delta_x + u_delta_y)
+    new_u += u_sqr * (dt_sqr / (2 * ds_sqr)) * (u_delta_x)
+    new_u += v_sqr * (dt_sqr / (2 * ds_sqr)) * (u_delta_y)
 
     new_v = v[1:-1, 1:-1].copy()
 
-    new_v -= u[1:-1, 1:-1] * (v[1:-1, 2:] - v[1:-1, :-2]) * dtdsds
-    new_v -= v[1:-1, 1:-1] * (v[2:, 1:-1] - v[:-2, 1:-1]) * dtdsds
+    new_v -= u[1:-1, 1:-1] * (v[1:-1, 2:] - v[1:-1, :-2]) * dtdss
+    new_v -= v[1:-1, 1:-1] * (v[2:, 1:-1] - v[:-2, 1:-1]) * dtdss
     new_v -= dtds / (2 * rho) * (p[2:, 1:-1] - p[:-2, 1:-1])
-    new_v += (
-        nu
-        * dt
-        / ds_sqr
-        * (-4 * v[1:-1, 1:-1] + v[1:-1, 2:] + v[1:-1, :-2] + v[2:, 1:-1] + v[:-2, 1:-1])
-    )
-    new_v += (
-        u[1:-1, 1:-1]
-        * u[1:-1, 1:-1]
-        * (dt_sqr / (2 * ds_sqr))
-        * (v[1:-1, 2:] - 2 * v[1:-1, 1:-1] + v[1:-1, :-2])
-    )
-    new_u += (
-        v[1:-1, 1:-1]
-        * v[1:-1, 1:-1]
-        * (dt_sqr / (2 * ds_sqr))
-        * (v[2:, 1:-1] - 2 * v[1:-1, 1:-1] + v[:-2, 1:-1])
-    )
+
+    v_delta_x = v[1:-1, 2:] + v[1:-1, :-2] - 2 * v[1:-1, 1:-1]
+    v_delta_y = v[2:, 1:-1] + v[:-2, 1:-1] - 2 * v[1:-1, 1:-1]
+    new_v += nu * dt / ds_sqr * (v_delta_x + v_delta_y)
+    new_v += u_sqr * (dt_sqr / (2 * ds_sqr)) * (v_delta_x)
+    new_u += v_sqr * (dt_sqr / (2 * ds_sqr)) * (v_delta_y)
 
     u[1:-1, 1:-1] = new_u
 
@@ -205,6 +183,7 @@ def animate_flow(num_frames: int = 100, interval: int = 1) -> None:  # pyright: 
     Args:
         num_frames: Number of animation frames to generate
         interval: Delay between frames in milliseconds
+
     """
     grids = init_grids()
     x = np.arange(nx) * ds
@@ -216,11 +195,19 @@ def animate_flow(num_frames: int = 100, interval: int = 1) -> None:  # pyright: 
     def update_animation(frame: int):
         """Update function for animation."""
         update(grids)
+        update(grids)
+        update(grids)
+        update(grids)
+        update(grids)
+        update(grids)
+        update(grids)
 
         # Clear and redraw streamplot since StreamplotSet cannot be updated directly
         ax.clear()  # type: ignore[reportAttributeAccessIssue]
-        ax.contourf(x, y, np.sqrt(grids.u**2 + grids.v**2), alpha=0.5, cmap=cm.viridis)  # pyright: ignore[reportAttributeAccessIssue]
+        # ax.contourf(x, y, np.sqrt(grids.u**2 + grids.v**2), alpha=0.5, cmap=cm.viridis)  # pyright: ignore[reportAttributeAccessIssue]
+
         # ax.contourf(x, y, grids.v, alpha=0.5, cmap=cm.viridis)  # pyright: ignore[reportAttributeAccessIssue]
+        ax.imshow(np.sqrt(grids.u**2 + grids.v**2), extent=(0, dim_x, 0, dim_y))
 
         ax.set_xlim(0, dim_x)  # type: ignore[reportAttributeAccessIssue]
         ax.set_ylim(0, dim_y)  # type: ignore[reportAttributeAccessIssue]
@@ -239,6 +226,7 @@ def animate_flow(num_frames: int = 100, interval: int = 1) -> None:  # pyright: 
 
 
 def main() -> None:
+    print(f"Reynolds: {start_velocity * rohr_rad * 2 / nu}")
     animate_flow()
     # grids = init_grids()
     # while True:
