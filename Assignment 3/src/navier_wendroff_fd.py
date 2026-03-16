@@ -263,6 +263,17 @@ def animate_flow(num_frames: int = 100, interval: int = 1) -> None:  # pyright: 
         # Clear and redraw streamplot since StreamplotSet cannot be updated directly
         ax.clear()  # type: ignore[reportAttributeAccessIssue]
         ax.imshow(np.sqrt(grids.u**2 + grids.v**2), extent=(0, dim_x, 0, dim_y))
+        # ax.imshow(
+        #     np.clip(
+        #         np.roll(grids.v, -1, axis=0)
+        #         - np.roll(grids.v, 1, axis=0)
+        #         - np.roll(grids.u, -1, axis=1)
+        #         + np.roll(grids.u, 1, axis=1),
+        #         -10,
+        #         10,
+        #     ),
+        #     extent=(0, dim_x, 0, dim_y),
+        # )
 
         ax.set_xlim(0, dim_x)  # type: ignore[reportAttributeAccessIssue]
         ax.set_ylim(0, dim_y)  # type: ignore[reportAttributeAccessIssue]
