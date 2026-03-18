@@ -1,5 +1,5 @@
-"""
-Lattice Boltzmann Method (LBM) — Karman Vortex Street Solver
+"""Lattice Boltzmann Method (LBM) — Karman Vortex Street Solver.
+
 =============================================================
 A minimal, educational 2D LBM solver using the D2Q9 lattice and BGK collision
 operator.  This code is prepared for the student of the course Scientific Computing at UvA.
@@ -20,10 +20,11 @@ Algorithm overview (each timestep):
 
 Dependencies: numpy, matplotlib
 Usage:        python lbm_karman.py
+
 """
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 # =============================================================================
 # 1.  D2Q9 Lattice Definition
@@ -48,7 +49,7 @@ c = np.array(
         [-1, 1],  # 6  — north-west
         [-1, -1],  # 7  — south-west
         [1, -1],
-    ]
+    ],
 )  # 8  — south-east
 
 # Lattice weights (from the D2Q9 equilibrium derivation)
@@ -63,7 +64,7 @@ w = np.array(
         1 / 36,
         1 / 36,
         1 / 36,
-    ]
+    ],
 )  # diagonals
 
 # Opposite direction index for each i (used in bounce-back)
@@ -74,8 +75,15 @@ opp = np.array([0, 3, 4, 1, 2, 7, 8, 5, 6])
 # 2.  Simulation Parameters
 # =============================================================================
 
-Nx = 300  # domain length  (lattice units)
-Ny = 120  # domain height  (lattice units)
+dim_x = 2.2
+rohr_x = 0.2
+rohr_y = 0.2
+rohr_rad = 0.05
+dim_y = 0.41
+ds = 0.01
+dt = 0.0001
+Nx = int(dim_x / ds) + 1
+Ny = int(dim_y / ds) + 1
 
 # Cylinder geometry
 cx_cyl = Nx // 5  # cylinder center x  (1/5 from inlet)
@@ -94,7 +102,7 @@ D = 2 * r_cyl  # cylinder diameter
 nu = U_inlet * D / Re  # kinematic viscosity
 tau = 3.0 * nu + 0.5  # BGK relaxation time
 
-print(f"Simulation parameters:")
+print("Simulation parameters:")
 print(f"  Grid:      {Nx} x {Ny}")
 print(f"  Cylinder:  center=({cx_cyl},{cy_cyl}), r={r_cyl}, D={D}")
 print(f"  Re={Re},  U_inlet={U_inlet},  nu={nu:.6f},  tau={tau:.4f}")
@@ -104,9 +112,8 @@ print(f"  Re={Re},  U_inlet={U_inlet},  nu={nu:.6f},  tau={tau:.4f}")
 # =============================================================================
 
 
-def equilibrium(rho, ux, uy):
-    """
-    Compute the equilibrium distribution f^eq for the D2Q9 lattice.
+def equilibrium(f):
+    """Compute the equilibrium distribution f^eq for the D2Q9 lattice.
 
     The equilibrium is derived from a second-order Taylor expansion of the
     Maxwell-Boltzmann distribution:
@@ -124,23 +131,43 @@ def equilibrium(rho, ux, uy):
     Returns
     -------
     feq : ndarray (Nx, Ny, 9) — equilibrium distributions
-    """
-    feq = np.zeros((Nx, Ny, 9))
-    usqr = ux**2 + uy**2  # |u|²
 
-    for i in range(9):
-        cu = c[i, 0] * ux + c[i, 1] * uy  # c_i · u
-        feq[:, :, i] = (
-            w[i]
-            * rho
-            * (
-                1.0
-                + 3.0 * cu  # c_i·u / cs²
-                + 4.5 * cu**2  # (c_i·u)² / (2·cs⁴)
-                - 1.5 * usqr
-            )
-        )  # -|u|² / (2·cs²)
-    return feq
+    """
+    # feq = np.zeros((Nx, Ny, 9))
+    # usqr = ux**2 + uy**2  # |u|²
+
+    # for i in range(9):
+    #     cu = c[i, 0] * ux + c[i, 1] * uy  # c_i · u
+    #     feq[:, :, i] = (
+    #         w[i]
+    #         * rho
+    #         * (
+    #             1.0
+    #             + 3.0 * cu  # c_i·u / cs²
+    #             + 4.5 * cu**2  # (c_i·u)² / (2·cs⁴)
+    #             - 1.5 * usqr
+    #         )
+    #     )  # -|u|² / (2·cs²)
+    # return feq
+    eq = np.zeros((Nx, Ny, 9))
+
+    rho = np.sum(f, axis=2)
+    ux = np.sum(f * c[:, 0], axis=2) / rho
+    uy = np.sum(f * c[:, 1], axis=2) / rho
+
+    u_sqr = ux**2 + uy**2
+    for direction in range(9):
+        uxe = ux * c[direction, 0]
+        uye = uy * c[direction, 1]
+        ue = uxe + uye
+
+        first = 1 / 3
+        second = ue
+        third = ue * ue / (2 / 3)
+        last = u_sqr / 2
+
+        eq[:, :, direction] = 3 * w[direction] * rho * (first + second + third - last)
+    return eq
 
 
 # =============================================================================
@@ -160,7 +187,6 @@ obstacle = (X - cx_cyl) ** 2 + (Y - cy_cyl) ** 2 <= r_cyl**2
 
 def main():
     """Run the LBM simulation: initialization, time loop, and visualization."""
-
     # =================================================================
     # 5a. Initialization
     # =================================================================
@@ -178,7 +204,7 @@ def main():
     uy_init[obstacle] = 0.0
 
     # Initialize distributions to equilibrium
-    f = equilibrium(rho_init, ux_init, uy_init)
+    f = equilibrium(np.ones((Nx, Ny, 9)))
 
     # =================================================================
     # 6.  Visualization Setup
@@ -203,7 +229,7 @@ def main():
             vmin=0,
             vmax=U_inlet * 2.0,
             aspect="auto",
-            extent=[0, Nx, 0, Ny],
+            extent=(0, Nx, 0, Ny),
         )
         ax.set_title(f"Velocity magnitude — step {step}")
         ax.set_xlabel("x")
@@ -212,8 +238,7 @@ def main():
         plt.pause(0.01)
 
     def plot_vorticity(ux, uy, step):
-        """
-        Plot the vorticity field (curl of velocity).
+        """Plot the vorticity field (curl of velocity).
         Vorticity = ∂uy/∂x - ∂ux/∂y  — highlights the alternating vortices
         in the Karman street much more vividly than velocity magnitude.
         """
@@ -233,7 +258,7 @@ def main():
             vmin=-0.04,
             vmax=0.04,
             aspect="auto",
-            extent=[0, Nx, 0, Ny],
+            extent=(0, Nx, 0, Ny),
         )
         ax.set_title(f"Vorticity field — step {step}")
         ax.set_xlabel("x")
@@ -285,7 +310,7 @@ def main():
         #      f_out is a NEW array so that f (pre-collision) is
         #      preserved for the bounce-back step below.
         # -------------------------------------------------------------
-        feq = equilibrium(rho, ux, uy)
+        feq = equilibrium(f)
         f_out = f - (f - feq) / tau
 
         # -------------------------------------------------------------
@@ -306,6 +331,17 @@ def main():
         for i in range(9):
             f[:, :, i] = np.roll(f_out[:, :, i], shift=c[i, 0], axis=0)
             f[:, :, i] = np.roll(f[:, :, i], shift=c[i, 1], axis=1)
+        # # Principal axes
+        # f[1:-1, :-1, 1] = f_out[:-2, :-1, 1]
+        # f[1:-1, 1:-1, 2] = f_out[1:-1, :-2, 2]
+        # f[1:-1, :-1, 3] = f_out[2:, :-1, 3]
+        # f[1:-1, :-2, 4] = f_out[1:-1, 1:-1, 4]
+
+        # # Diagonals
+        # f[1:-1, 1:-1, 5] = f_out[:-2, :-2, 5]
+        # f[1:-1, 1:-1, 6] = f_out[2:, :-2, 6]
+        # f[1:-1, :-1, 7] = f_out[2:, 1:, 7]
+        # f[1:-1, :-1, 8] = f_out[:-2, 1:, 8]
 
         # -------------------------------------------------------------
         # 7e.  Outlet boundary condition (zero-gradient / open)
