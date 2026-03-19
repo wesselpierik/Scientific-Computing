@@ -17,12 +17,12 @@ dim_y = 0.41
 
 # Discretization parameters
 ds = 0.01
-dt = 0.0001
+# dt = 0.0001
 nx = int(dim_x / ds) + 1
 ny = int(dim_y / ds) + 1
 
-re = 150
-u = 0.05
+re = 200
+u = 0.12
 n = (rohr_rad * 2) // ds
 nu = n * u / re
 tau = 3 * nu + 0.5
@@ -60,14 +60,14 @@ no_slip = rohr.copy()
 no_slip[0] = 0
 no_slip[-1] = 0
 
-rohr_top = int(
+rohr_bottom = int(
     reduce(
         lambda acc, x: x[0] if x[1] != nx and acc == 0 else acc,  # pyright: ignore[reportIndexIssue]
         enumerate(np.sum(rohr, axis=1)),
         0,
     )
 )
-rohr_bottom = int(
+rohr_top = int(
     reduce(
         lambda acc, x: x[0] if x[1] != nx else acc,  # pyright: ignore[reportIndexIssue]
         enumerate(np.sum(rohr, axis=1)),
@@ -90,43 +90,33 @@ rohr_right = int(
 )
 
 
-@njit(cache=True)
 def feq(f: np.ndarray) -> np.ndarray:
     eq = np.zeros((ny, nx, 9))
 
-    for row in range(1, ny - 1):
-        for column in range(nx):
-            if rohr[row, column] == 0:
-                eq[row, column] = 0
-                continue
-            rho = np.sum(f[row, column])
-            ux = np.sum(f[row, column] * e[:, 1]) / rho
-            uy = np.sum(f[row, column] * e[:, 0]) / rho
+    rho = np.sum(f, axis=2)
+    ux = np.sum(f * e[:, 1], axis=2) / rho
+    uy = np.sum(f * e[:, 0], axis=2) / rho
 
-            u_sqr = ux**2 + uy**2
-            for direction in range(9):
-                uxe = ux * e[direction, 1]
-                uye = uy * e[direction, 0]
-                ue = uxe + uye
+    u_sqr = ux**2 + uy**2
+    for direction in range(9):
+        uxe = ux * e[direction, 1]
+        uye = uy * e[direction, 0]
+        ue = uxe + uye
 
-                first = cs_sqr
-                second = ue
-                third = ue * ue / (2 * cs_sqr)
-                last = u_sqr / 2
+        first = 1 / 3
+        second = ue
+        third = ue * ue * 3 / 2
+        last = u_sqr / 2
 
-                eq[row, column, direction] = (
-                    1 / cs_sqr * w[direction] * rho * (first + second + third - last)
-                )
+        eq[:, :, direction] = 3 * w[direction] * rho * (first + second + third - last)
     return eq
 
 
 @njit(cache=True)
 def reflections(f: np.ndarray, f_new: np.ndarray) -> None:
     # Reflect of center column
-    for row in range(rohr_top - 1, rohr_bottom + 2):
+    for row in range(rohr_bottom - 1, rohr_top + 2):
         for column in range(rohr_left - 1, rohr_right + 2):
-            if rohr[row, column] == 0:
-                continue
             for direction in range(9):
                 new_row = row + e[direction, 0]
                 new_column = column + e[direction, 1]
@@ -181,9 +171,9 @@ def inflow(f: np.ndarray) -> None:
         )
         + 2.0
         * (
-            f[bottom : top + 1, 0, 2]
-            + f[bottom : top + 1, 0, 5]
-            + f[bottom : top + 1, 0, 6]
+            f[bottom : top + 1, 0, 4]
+            + f[bottom : top + 1, 0, 7]
+            + f[bottom : top + 1, 0, 8]
         )
     ) / (1.0 - u_parabolic)
 
@@ -207,7 +197,7 @@ def step(f: np.ndarray) -> None:
     f_new = f - (f - feq(f)) / tau
 
     # Reflections against the object and top and bottom walls
-    reflections(f_new, f_new)
+    reflections(f, f_new)
 
     # Streaming
     stream(f, f_new)
@@ -216,7 +206,7 @@ def step(f: np.ndarray) -> None:
     inflow(f)
 
 
-def animate_flow(num_frames: int = 100, interval: int = 100) -> None:  # pyright: ignore[reportUnusedFunction]
+def animate_flow(num_frames: int = 100, interval: int = 1) -> None:  # pyright: ignore[reportUnusedFunction]
     # Start with equilibrium to ease in simulation
     directions = 9
     f = feq(np.ones((ny, nx, directions)))
@@ -229,12 +219,18 @@ def animate_flow(num_frames: int = 100, interval: int = 100) -> None:  # pyright
     def update_animation(frame: int):
         """Update function for animation."""
         step(f)
-        # step(f)
-        # step(f)
-        # step(f)
-        # step(f)
-        # step(f)
-        # step(f)
+        step(f)
+        step(f)
+        step(f)
+        step(f)
+        step(f)
+        step(f)
+        step(f)
+        step(f)
+        step(f)
+        step(f)
+        step(f)
+        step(f)
 
         # Clear and redraw streamplot since StreamplotSet cannot be updated directly
         ax.clear()  # type: ignore[reportAttributeAccessIssue]
@@ -243,13 +239,10 @@ def animate_flow(num_frames: int = 100, interval: int = 100) -> None:  # pyright
         uy = np.sum(f * e[:, 0], axis=2) / (rho + (rho == 0))
         speed = np.sqrt(ux**2 + uy**2)
         ax.imshow(
-            f[:, :, 7],
+            # f[:, :, 5],
             # np.sum(f, axis=2),
-            # speed * rohr,
-            # origin="lower",
-            # cmap="jet",  # Warning!: Not a sequential color scale, use 'viridis' instead!
-            # vmin=0,
-            # vmax=u * 2.0,
+            speed * rohr,
+            origin="lower",
             extent=(0, dim_x, 0, dim_y),
         )
 
