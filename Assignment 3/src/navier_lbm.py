@@ -6,7 +6,7 @@ from itertools import product
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import animation
-from numba import njit
+from numba import njit, prange
 
 # Karman street
 dim_x = 2.2
@@ -16,12 +16,12 @@ rohr_rad = 0.05
 dim_y = 0.41
 
 # Discretization parameters
-ds = 0.004
+ds = 0.0025
 # dt = 0.0001
 nx = int(dim_x / ds) + 1
 ny = int(dim_y / ds) + 1
 
-re = 220
+re = 300
 u = 0.1
 n = (rohr_rad * 2) // ds
 nu = n * u / re
@@ -85,30 +85,59 @@ rohr_right = int(
 )
 
 
+@njit(cache=True, parallel=False)
 def feq(f: np.ndarray) -> np.ndarray:
-    eq = np.ones((nx, ny, 9))
+    """feq implementation using explicit loops instead of numpy element-wise ops."""
+    eq = np.zeros((nx, ny, 9))
 
-    rho = np.sum(f, axis=2)
-    ux = np.sum(f * e[:, 0], axis=2) / rho
-    uy = np.sum(f * e[:, 1], axis=2) / rho
+    # Compute rho, ux, uy using explicit loops
+    rho = np.zeros((nx, ny))
+    ux = np.zeros((nx, ny))
+    uy = np.zeros((nx, ny))
 
-    u_sqr = ux**2 + uy**2
-    for direction in range(9):
-        uxe = ux * e[direction, 0]
-        uye = uy * e[direction, 1]
-        ue = uxe + uye
+    for i in prange(nx):
+        for j in prange(ny):
+            rho_val = 0.0
+            ux_val = 0.0
+            uy_val = 0.0
 
-        first = 1 / 3
-        second = ue
-        third = ue * ue * 3 / 2
-        last = u_sqr / 2
+            for direction in range(9):
+                f_val = f[i, j, direction]
+                rho_val += f_val
+                ux_val += f_val * e[direction, 0]
+                uy_val += f_val * e[direction, 1]
 
-        eq[:, :, direction] = 3 * w[direction] * rho * (first + second + third - last)
+            rho[i, j] = rho_val
+            ux[i, j] = ux_val / rho_val
+            uy[i, j] = uy_val / rho_val
+
+    # Compute equilibrium distribution
+    for i in prange(nx):
+        for j in prange(ny):
+            ux_val = ux[i, j]
+            uy_val = uy[i, j]
+            rho_val = rho[i, j]
+            u_sqr = ux_val**2 + uy_val**2
+
+            for direction in range(9):
+                uxe = ux_val * e[direction, 0]
+                uye = uy_val * e[direction, 1]
+                ue = uxe + uye
+
+                first = 1.0 / 3.0
+                second = ue
+                third = ue * ue * 3.0 / 2.0
+                last = u_sqr / 2.0
+
+                eq[i, j, direction] = (
+                    3.0 * w[direction] * rho_val * (first + second + third - last)
+                )
+
     return eq
 
 
 @njit(cache=True)
-def reflections(f: np.ndarray, f_new: np.ndarray) -> None:
+def reflections(f: np.ndarray, f_new: np.ndarray, rohr: np.ndarray) -> None:
     # Reflect of center column
     for column in range(rohr_left - 1, rohr_right + 2):
         for row in range(rohr_bottom - 1, rohr_top + 2):
@@ -123,12 +152,38 @@ def reflections(f: np.ndarray, f_new: np.ndarray) -> None:
                     ]
 
 
+@njit(cache=True, fastmath=True)
+def _roll_axis0(arr: np.ndarray, shift: int) -> np.ndarray:
+    """Roll array along axis 0 (compatible with Numba)."""
+    n = arr.shape[0]
+    shift = shift % n
+    result = np.empty_like(arr)
+    for i in range(n):
+        result[i] = arr[(i - shift) % n]
+    return result
+
+
+@njit(cache=True, fastmath=True)
+def _roll_axis1(arr: np.ndarray, shift: int) -> np.ndarray:
+    """Roll array along axis 1 (compatible with Numba)."""
+    n = arr.shape[1]
+    shift = shift % n
+    result = np.empty_like(arr)
+    for i in range(arr.shape[0]):
+        for j in range(n):
+            result[i, j] = arr[i, (j - shift) % n]
+    return result
+
+
+@njit(cache=True, fastmath=True)
 def stream(f: np.ndarray, f_new: np.ndarray) -> None:
+    """Streaming step using Numba-compatible manual rolls."""
     for i in range(9):
-        f[:, :, i] = np.roll(f_new[:, :, i], shift=e[i, 0], axis=0)
-        f[:, :, i] = np.roll(f[:, :, i], shift=e[i, 1], axis=1)
+        shifted = _roll_axis0(f_new[:, :, i], e[i, 0])
+        f[:, :, i] = _roll_axis1(shifted, e[i, 1])
 
 
+@njit(cache=True)
 def inflow(f: np.ndarray) -> None:
     u_profile = u
     rho_in = (
@@ -145,11 +200,13 @@ def inflow(f: np.ndarray) -> None:
     )
 
 
+@njit(cache=True)
 def outflow(f: np.ndarray) -> None:
     # Zero-gradient outflow at the right boundary
     f[-1, :, :] = f[-2, :, :]
 
 
+@njit(cache=True, fastmath=True)
 def bounce_back_walls(f: np.ndarray, f_new: np.ndarray) -> None:
     # Bottom wall (y = 0)
     f_new[:, 0, 2] = f[:, 0, 4]
@@ -167,7 +224,7 @@ def step(f: np.ndarray) -> None:
     f_new = f - (f - feq(f)) / tau
 
     # Reflections against the object
-    reflections(f, f_new)
+    reflections(f, f_new, rohr)
     bounce_back_walls(f, f_new)
 
     # Streaming
@@ -202,13 +259,10 @@ def animate_flow(num_frames: int = 100, interval: int = 1) -> None:  # pyright: 
         uy = np.sum(f * e[:, 1], axis=2) / (rho + (rho == 0))
         speed = np.sqrt(ux**2 + uy**2)
         ax.imshow(
-            # (f[:, :, frame % 9]).T,
-            # np.sum(f, axis=2).T,
             speed.T,
-            # ux.T,
             origin="lower",
             extent=(0, dim_x, 0, dim_y),
-            interpolation="none",
+            # interpolation="none",
         )
 
         ax.set_xlim(0, dim_x)  # type: ignore[reportAttributeAccessIssue]
