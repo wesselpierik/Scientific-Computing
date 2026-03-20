@@ -4,8 +4,11 @@ Group:        10
 Course:       Scientific Computing
 
 Description:
-Uses a Lax-Wendroff finite differnce scheme to solve the Navier stokes equations
+Uses a Lax-Wendroff finite difference scheme to solve the Navier stokes equations
 in a Karman street.
+
+AI usage:
+Used Haiku4.5 to write comments for the functions.
 """
 
 from itertools import product
@@ -37,10 +40,9 @@ rohr_x = 0.2
 rohr_y = 0.2
 rohr_rad = 0.05
 dim_y = 0.41
-start_velocity = 50
 
 # Discretization parameters
-ds = 0.01
+ds = 0.005
 dt = 0.0001
 nx = int(dim_x / ds) + 1
 ny = int(dim_y / ds) + 1
@@ -48,6 +50,8 @@ ny = int(dim_y / ds) + 1
 # Parameters
 rho = 1
 nu = 0.005
+re = 150
+start_velocity = re * nu / (2 * rohr_rad)
 
 
 def init_grids() -> Grids:
@@ -70,6 +74,7 @@ def init_grids() -> Grids:
         return (1 - ((x * 2 / dim_y) - 1) ** 2) * start_velocity
 
     u[:, 0] = parabole(np.arange(ny) * ds)
+    u[:, 0] = np.ones(ny) * start_velocity
     v = np.zeros_like(u)
     p = np.zeros_like(u)
     rohr = np.zeros_like(u)
@@ -249,37 +254,24 @@ def animate_flow(num_frames: int = 100, interval: int = 1) -> None:  # pyright: 
     x, y = np.meshgrid(x, y)
 
     fig, ax = plt.subplots(figsize=(12, 4))
+    time = 0
 
     def update_animation(frame: int):
         """Update function for animation."""
-        update(grids)
-        update(grids)
-        update(grids)
-        update(grids)
-        update(grids)
-        update(grids)
-        update(grids)
+        nonlocal time
+        for _ in range(10):
+            time += dt
+            update(grids)
 
         # Clear and redraw streamplot since StreamplotSet cannot be updated directly
         ax.clear()  # type: ignore[reportAttributeAccessIssue]
         ax.imshow(np.sqrt(grids.u**2 + grids.v**2), extent=(0, dim_x, 0, dim_y))
-        # ax.imshow(
-        #     np.clip(
-        #         np.roll(grids.v, -1, axis=0)
-        #         - np.roll(grids.v, 1, axis=0)
-        #         - np.roll(grids.u, -1, axis=1)
-        #         + np.roll(grids.u, 1, axis=1),
-        #         -10,
-        #         10,
-        #     ),
-        #     extent=(0, dim_x, 0, dim_y),
-        # )
 
         ax.set_xlim(0, dim_x)  # type: ignore[reportAttributeAccessIssue]
         ax.set_ylim(0, dim_y)  # type: ignore[reportAttributeAccessIssue]
         ax.set_xlabel("x")  # type: ignore[reportAttributeAccessIssue]
         ax.set_ylabel("y")  # type: ignore[reportAttributeAccessIssue]
-        ax.set_title(f"Navier-Stokes Flow (Frame {frame + 1}/{num_frames})")  # type: ignore[reportAttributeAccessIssue]
+        ax.set_title(f"FD after {time:.3f} seconds")  # type: ignore[reportAttributeAccessIssue]
 
     anim = animation.FuncAnimation(
         fig,
@@ -297,7 +289,7 @@ def main() -> None:
     Prints the Reynolds number of the flow and launches the interactive animation.
 
     """
-    print(f"Reynolds: {start_velocity * rohr_rad * 2 / nu}")
+    print(f"Reynolds: {re}\nNu: {nu}\nds: {ds}")
     animate_flow()
 
 
