@@ -92,7 +92,7 @@ r_cyl = 8  # cylinder radius
 
 # Flow parameters
 U_inlet = 0.12  # inlet velocity (lattice units, keep ≪ 1 for low Mach)
-Re = 150  # target Reynolds number
+Re = 200  # target Reynolds number
 
 # Derived quantities:
 #   Re = U * D / nu   →  nu = U * D / Re
