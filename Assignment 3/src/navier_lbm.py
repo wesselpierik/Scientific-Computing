@@ -16,13 +16,13 @@ rohr_rad = 0.05
 dim_y = 0.41
 
 # Discretization parameters
-ds = 0.005
+ds = 0.004
 # dt = 0.0001
 nx = int(dim_x / ds) + 1
 ny = int(dim_y / ds) + 1
 
-re = 150
-u = 0.05
+re = 220
+u = 0.1
 n = (rohr_rad * 2) // ds
 nu = n * u / re
 tau = 3 * nu + 0.5
@@ -88,9 +88,9 @@ rohr_right = int(
 def feq(f: np.ndarray) -> np.ndarray:
     eq = np.ones((nx, ny, 9))
 
-    rho = np.sum(f[:, 1:-1], axis=2)
-    ux = np.sum(f[:, 1:-1] * e[:, 0], axis=2) / rho
-    uy = np.sum(f[:, 1:-1] * e[:, 1], axis=2) / rho
+    rho = np.sum(f, axis=2)
+    ux = np.sum(f * e[:, 0], axis=2) / rho
+    uy = np.sum(f * e[:, 1], axis=2) / rho
 
     u_sqr = ux**2 + uy**2
     for direction in range(9):
@@ -103,9 +103,7 @@ def feq(f: np.ndarray) -> np.ndarray:
         third = ue * ue * 3 / 2
         last = u_sqr / 2
 
-        eq[:, 1:-1, direction] = (
-            3 * w[direction] * rho * (first + second + third - last)
-        )
+        eq[:, :, direction] = 3 * w[direction] * rho * (first + second + third - last)
     return eq
 
 
@@ -123,40 +121,16 @@ def reflections(f: np.ndarray, f_new: np.ndarray) -> None:
                         row,
                         direction,
                     ]
-    # # Reflect of walls
-    # for column in range(nx):
-    #     for row in [1, ny - 2]:
-    #         for direction in range(9):
-    #             new_row = row + e[direction, 1]
-    #             new_column = column + e[direction, 0]
-    #             if (new_row == 0 or new_row == ny - 1) and (
-    #                 new_column >= 0 and new_column <= nx - 1
-    #             ):
-    #                 f_new[new_column, new_row, wall_opposite[direction]] = f[
-    #                     column, row, direction
-    #                 ]
 
 
 def stream(f: np.ndarray, f_new: np.ndarray) -> None:
     for i in range(9):
         f[:, :, i] = np.roll(f_new[:, :, i], shift=e[i, 0], axis=0)
         f[:, :, i] = np.roll(f[:, :, i], shift=e[i, 1], axis=1)
-    for i in range(9):
-        opp_dir = opposite[i]
-        if e[opp_dir, 1] > 0:
-            f[:, -2:, i] = np.roll(f[:, -2:, opp_dir], shift=e[i, 0], axis=0)
-            f[:, -2:, i] = np.roll(f[:, -2:, i], shift=e[i, 1], axis=1)
-        elif e[opp_dir, 1] < 0:
-            f[:, :2, i] = np.roll(f[:, :2, opp_dir], shift=e[i, 0], axis=0)
-            f[:, :2, i] = np.roll(f[:, :2, i], shift=e[i, 1], axis=1)
-
-    f[-1, :] = f[-2, :]
-    f[:, 0] = 0
-    f[:, -1] = 0
 
 
 def inflow(f: np.ndarray) -> None:
-    u_profile = (1 - np.linspace(-1, 1, ny) ** 2) * u
+    u_profile = u
     rho_in = (
         (f[0, :, 0] + f[0, :, 2] + f[0, :, 4])
         + 2.0 * (f[0, :, 3] + f[0, :, 6] + f[0, :, 7])
@@ -171,24 +145,44 @@ def inflow(f: np.ndarray) -> None:
     )
 
 
+def outflow(f: np.ndarray) -> None:
+    # Zero-gradient outflow at the right boundary
+    f[-1, :, :] = f[-2, :, :]
+
+
+def bounce_back_walls(f: np.ndarray, f_new: np.ndarray) -> None:
+    # Bottom wall (y = 0)
+    f_new[:, 0, 2] = f[:, 0, 4]
+    f_new[:, 0, 5] = f[:, 0, 7]
+    f_new[:, 0, 6] = f[:, 0, 8]
+
+    # _new Top wall (y = ny - 1)
+    f_new[:, -1, 4] = f[:, -1, 2]
+    f_new[:, -1, 7] = f[:, -1, 5]
+    f_new[:, -1, 8] = f[:, -1, 6]
+
+
 def step(f: np.ndarray) -> None:
     # Collision
     f_new = f - (f - feq(f)) / tau
 
-    # Reflections against the object and top and bottom walls
+    # Reflections against the object
     reflections(f, f_new)
+    bounce_back_walls(f, f_new)
 
     # Streaming
     stream(f, f_new)
 
-    # Input boundary conditions
+    # Boundary conditions
     inflow(f)
+    outflow(f)
 
 
 def animate_flow(num_frames: int = 100, interval: int = 1) -> None:  # pyright: ignore[reportUnusedFunction]
     # Start with equilibrium to ease in simulation
     directions = 9
     f = feq(np.ones((nx, ny, directions)))
+
     x = np.arange(nx) * ds
     y = np.arange(ny) * ds
     x, y = np.meshgrid(x, y)
@@ -198,7 +192,7 @@ def animate_flow(num_frames: int = 100, interval: int = 1) -> None:  # pyright: 
 
     def update_animation(frame: int):
         """Update function for animation."""
-        for _ in range(1):
+        for _ in range(20):
             step(f)
 
         # Clear and redraw streamplot since StreamplotSet cannot be updated directly
@@ -208,7 +202,7 @@ def animate_flow(num_frames: int = 100, interval: int = 1) -> None:  # pyright: 
         uy = np.sum(f * e[:, 1], axis=2) / (rho + (rho == 0))
         speed = np.sqrt(ux**2 + uy**2)
         ax.imshow(
-            # (f[:, :, 5]).T,
+            # (f[:, :, frame % 9]).T,
             # np.sum(f, axis=2).T,
             speed.T,
             # ux.T,
