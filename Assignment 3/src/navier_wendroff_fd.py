@@ -147,6 +147,7 @@ def _update_p(
     )
     # Iterate pressure
     for _ in range(50):
+        # Rohr multiplications for Neumann boundary around object
         p[1:-1, 1:-1] = (
             p[1:-1, 2:] * rohr[1:-1, 2:]
             + p[1:-1, :-2] * rohr[1:-1, :-2]
