@@ -27,12 +27,12 @@ rohr_rad = 0.05
 dim_y = 0.41
 
 # Discretization parameters
-ds = 0.005
+ds = 0.01
 nx = int(dim_x / ds) + 1
 ny = int(dim_y / ds) + 1
 
-re = 150
-u = 0.1
+re = 100
+u = 0.12
 nu_phys = 0.005
 u_phys = re * nu_phys / (rohr_rad * 2)
 dt = u * ds / u_phys
