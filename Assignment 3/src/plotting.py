@@ -37,7 +37,37 @@ def plot_reynolds() -> None:
 
 @rc_context(rcCustom_wide)
 def plot_strouhal() -> None:
-    pass
+    reynolds = []
+    fd = []
+    fem = []
+    lbm = []
+
+    with strouhal_path.open("r") as f:
+        reader = csv.reader(f)
+        next(reader) 
+
+        for i in range(6):
+            row = next(reader)
+            print(row)
+            re, f_d, f_em, l_bm = row
+            reynolds.append(float(re))
+            fd.append(float(f_d))
+            fem.append(float(f_em))
+            lbm.append(float(l_bm))
+
+    plt.plot(reynolds, fd, marker="o", label="FD")
+    plt.plot(reynolds, fem, marker="o", label="FEM")
+    plt.plot(reynolds, lbm, marker="o", label="LBM")
+
+    plt.xlabel("Reynolds number")
+    plt.ylabel("Strouhal number")
+    plt.title("Strouhal number per method")
+    plt.grid()
+    plt.legend()
+    plt.ylim(0.24, 0.3)
+    plt.xlim(100, 500)
+
+    plt.savefig("strouhal.png")
 
 
 def parse_args() -> argparse.Namespace:
