@@ -1,13 +1,16 @@
+import argparse
+import os
 import matplotlib.pyplot as plt
 import numpy as np
 import numba
-import sys
 from multiprocessing import cpu_count, get_context
 from functools import partial
 
 import scipy as sp
 from scipy.sparse.linalg import LinearOperator, gmres, spilu
 
+# Try to import tqdm for progress bars, but allow it to be optional
+# Required since tqdm is not available on the supercomputer cluster
 try:
     from tqdm import tqdm
 
@@ -15,7 +18,7 @@ try:
 except ImportError:
     TQDM = False
 
-
+# Global variables for shared data across worker processes
 SHARED_A_EQ = None
 SHARED_PRECONDITIONER = None
 SHARED_ROW_SCALE_INV = None
@@ -25,6 +28,7 @@ SHARED_NY = None
 SHARED_HX = None
 SHARED_HY = None
 
+# Measurement locations in the room (x, y) in meters
 MEASURE_LOCATIONS = {
     "living_room": (1, 5),
     "kitchen": (2, 1),
@@ -45,12 +49,16 @@ class gmres_counter(object):
 
 
 @numba.njit(cache=True)
-def f(x, y, x_r, y_r, amplitude, sigma):
-    return amplitude * np.exp(-(((x - x_r)) ** 2 + ((y - y_r)) ** 2) / (2 * sigma**2))
+def f(
+    x: float, y: float, x_r: float, y_r: float, amplitude: float, sigma: float
+) -> float:
+    return amplitude * np.exp(
+        -(((x - x_r)) ** 2 + ((y - y_r)) ** 2) / (2 * sigma**2)
+    )
 
 
 @numba.njit(cache=True)
-def idx(i, j, Nx):
+def idx(i: int, j: int, Nx: int) -> int:
     return i * Nx + j
 
 
@@ -63,7 +71,7 @@ def matrix_construction(
     hx: float,
     hy: float,
     k: float,
-):
+) -> None:
     for j in range(Nx):
         p = idx(i, j, Nx)
 
@@ -131,7 +139,7 @@ def build_source_vector(
     hy: float,
     amplitude: float,
     sigma: float,
-):
+) -> np.ndarray:
     """Build RHS for a given router location.
 
     Args:
@@ -159,7 +167,9 @@ def build_source_vector(
 
 
 @numba.njit(cache=True)
-def measure_signal_strength(u_2d: np.ndarray, i: int, j: int, hx: float, hy: float) -> float:
+def measure_signal_strength(
+    u_2d: np.ndarray, i: int, j: int, hx: float, hy: float
+) -> float:
     """Measure signal strength within 5cm radius of measurement point.
 
     Args:
@@ -172,7 +182,9 @@ def measure_signal_strength(u_2d: np.ndarray, i: int, j: int, hx: float, hy: flo
     Returns:
         float: Average signal strength in dB within 5cm radius.
     """
-    strength = 10 * np.log10(np.abs(u_2d) ** 2 / np.max(np.abs(u_2d) ** 2) + 1e-20)
+    strength = 10 * np.log10(
+        np.abs(u_2d) ** 2 / np.max(np.abs(u_2d) ** 2) + 1e-20
+    )
 
     summed_strength = 0.0
     num_points = 0
@@ -206,11 +218,11 @@ def create_wall(
     y_start: float,
     y_end: float,
     n: np.ndarray,
-    Ny,
-    Nx,
-    hy,
-    hx,
-):
+    Ny: int,
+    Nx: int,
+    hy: float,
+    hx: float,
+) -> None:
     for i in range(Ny):
         y = i * hy
         if y_start <= y <= y_end:
@@ -221,7 +233,9 @@ def create_wall(
 
 
 @numba.njit(cache=True)
-def room_formation(Nx: int, Ny: int, Ly: float, Lx: float, n: np.ndarray):
+def room_formation(
+    Nx: int, Ny: int, Ly: float, Lx: float, n: np.ndarray
+) -> None:
     hx = Lx / (Nx - 1)
     hy = Ly / (Ny - 1)
 
@@ -247,36 +261,36 @@ def room_formation(Nx: int, Ny: int, Ly: float, Lx: float, n: np.ndarray):
     create_wall(5.925, 6.075, 3, 7.925, n, Ny, Nx, hy, hx)
 
 
-def build_preconditioner(A_csc, A_csr):
+def build_preconditioner(
+    A_csc: sp.sparse.csc_array, A_csr: sp.sparse.csr_array
+) -> LinearOperator:
     A_work = A_csc.copy()
     A_work.sum_duplicates()
     A_work.eliminate_zeros()
     A_work.sort_indices()
 
-    identity = sp.sparse.eye(A_work.shape[0], format="csc", dtype=A_work.dtype) * 1j
+    # Shift the matrix by a small imaginary value to improve
+    # ILU stability if needed.
+    identity = (
+        sp.sparse.eye(A_work.shape[0], format="csc", dtype=A_work.dtype) * 1j
+    )
     attempts = [
         ("ILU preconditioner", A_work, 5e-4, 20),
         (
-            "shifted ILU preconditioner (shift=1e-8)",
+            "shifted ILU preconditioner (shift=1e-8j)",
             A_work + 1e-8 * identity,
             1e-3,
             30,
         ),
         (
-            "shifted ILU preconditioner (shift=1e-6)",
+            "shifted ILU preconditioner (shift=1e-6j)",
             A_work + 1e-6 * identity,
             1e-3,
             30,
         ),
         (
-            "shifted ILU preconditioner (shift=1e-4)",
+            "shifted ILU preconditioner (shift=1e-4j)",
             A_work + 1e-4 * identity,
-            1e-2,
-            40,
-        ),
-        (
-            "complex shifted ILU preconditioner (shift=1e-3j)",
-            A_work + 1e-3j * identity,
             1e-2,
             40,
         ),
@@ -292,17 +306,23 @@ def build_preconditioner(A_csc, A_csr):
                 diag_pivot_thresh=0.01,
             )
             print(f"Using {label}")
-            return LinearOperator(A_work.shape, matvec=ilu.solve, dtype=A_work.dtype)
+            return LinearOperator(
+                A_work.shape, matvec=ilu.solve, dtype=A_work.dtype
+            )
         except RuntimeError as error:
             print(f"{label} failed: {error}")
 
     diag = A_csr.diagonal().copy()
     diag[np.abs(diag) < 1e-12] = 1.0
     print("ILU failed for all attempts; using Jacobi preconditioner")
-    return LinearOperator(A_csr.shape, matvec=lambda x: x / diag, dtype=A_csr.dtype)
+    return LinearOperator(
+        A_csr.shape, matvec=lambda x: x / diag, dtype=A_csr.dtype
+    )
 
 
-def equilibrate_system(A_csr, eps=1e-14):
+def equilibrate_system(
+    A_csr: sp.sparse.csr_array, eps: float = 1e-14
+) -> tuple[sp.sparse.csr_array, np.ndarray, np.ndarray]:
     """Equilibrate rows and columns once and reuse scaling for all RHS vectors.
 
     Args:
@@ -331,7 +351,7 @@ def equilibrate_system(A_csr, eps=1e-14):
     return A_eq, row_scale_inv, col_norm
 
 
-def solve_with_refinement(
+def solve_GMRES(
     A_csr,
     rhs,
     preconditioner,
@@ -340,9 +360,8 @@ def solve_with_refinement(
     atol=1e-12,
     maxiter=10000,
     restart=300,
-    refinement_steps=0,
-):
-    """Solve with GMRES and iterative refinement.
+) -> tuple[np.ndarray, int]:
+    """Solve with GMRES.
 
     Args:
         A_csr: System matrix in CSR format.
@@ -350,13 +369,12 @@ def solve_with_refinement(
         preconditioner: LinearOperator preconditioner for GMRES.
         counter: Callback object tracking GMRES residual history.
         rtol: Relative tolerance for GMRES.
-        atol: Absolute tolerance for GMRES and refinement solves.
+        atol: Absolute tolerance for GMRES.
         maxiter: Maximum GMRES iterations.
         restart: Restart parameter passed to GMRES.
-        refinement_steps: Number of iterative-refinement correction solves.
 
     Returns:
-        tuple[np.ndarray, int]: Solution vector and final GMRES info code.
+        tuple[np.ndarray, int]: Solution vector and GMRES info code.
     """
     solution, info = gmres(
         A_csr,
@@ -369,41 +387,12 @@ def solve_with_refinement(
         callback=counter,
     )
 
-    rhs_norm = np.linalg.norm(rhs) + 1e-30
-    final_info = info
-
-    for step in range(refinement_steps):
-        residual = rhs - A_csr @ solution
-        rel_residual = np.linalg.norm(residual) / rhs_norm
-        print(f"refine step {step}: relative residual = {rel_residual:.3e}")
-
-        if rel_residual <= rtol:
-            break
-
-        correction, corr_info = gmres(
-            A_csr,
-            residual,
-            M=preconditioner,
-            maxiter=maxiter,
-            restart=restart,
-            rtol=max(rtol * 0.1, 1e-12),
-            atol=atol,
-        )
-        solution += correction
-
-        if corr_info != 0:
-            print(f"refinement correction solve stopped with info={corr_info}")
-            final_info = corr_info
-            break
-
-    residual = rhs - A_csr @ solution
-    rel_residual = np.linalg.norm(residual) / rhs_norm
-    print(f"final relative residual = {rel_residual:.3e}")
-
-    return solution, final_info
+    return solution, info
 
 
-def check_router_position(x_r: float, y_r: float, measure_locations: dict):
+def check_router_position(
+    x_r: float, y_r: float, measure_locations: dict
+) -> bool:
     if (
         (0.15 <= x_r <= 2.425 and 0.15 <= y_r <= 2.0)
         or (6.925 <= x_r <= 7.075 and 0.15 <= y_r <= 1.5)
@@ -428,7 +417,8 @@ def simulate_wifi_signal(
     amplitude: float,
     sigma: float,
     scale: int,
-):
+    output_dir: str = ".",
+) -> tuple[float, float, float, float, float, float] | None:
     if not check_router_position(x_r, y_r, MEASURE_LOCATIONS):
         return None
     b = build_source_vector(
@@ -440,7 +430,7 @@ def simulate_wifi_signal(
 
     print("Created source vector, starting GMRES solve...")
 
-    u_eq, info = solve_with_refinement(
+    u_eq, info = solve_GMRES(
         SHARED_A_EQ,
         b_eq,
         preconditioner=SHARED_PRECONDITIONER,
@@ -499,7 +489,8 @@ def simulate_wifi_signal(
     plt.xlabel("x (meters)")
     plt.ylabel("y (meters)")
     plt.legend()
-    plt.savefig(f"signal_{x_r:.2f}_{y_r:.2f}_{scale}.png")
+    output_path = f"{output_dir}/signal_{x_r:.2f}_{y_r:.2f}_{scale}.png"
+    plt.savefig(output_path)
     plt.close()
 
     return (
@@ -512,7 +503,7 @@ def simulate_wifi_signal(
     )
 
 
-def _worker_task(args, amplitude, sigma, scale):
+def _worker_task(args, amplitude, sigma, scale, output_dir):
     """Worker task for multiprocessing pool.
 
     Args:
@@ -520,12 +511,13 @@ def _worker_task(args, amplitude, sigma, scale):
         amplitude: Source amplitude.
         sigma: Source width.
         scale: Scale factor.
+        output_dir: Output directory for PNG files.
 
     Returns:
         Result tuple or None if position invalid.
     """
     x_r, y_r = args
-    return simulate_wifi_signal(x_r, y_r, amplitude, sigma, scale)
+    return simulate_wifi_signal(x_r, y_r, amplitude, sigma, scale, output_dir)
 
 
 def main(
@@ -537,7 +529,13 @@ def main(
     amplitude: float,
     sigma: float,
     scale: int,
-):
+    output_dir: str = ".",
+    results_file: str = "results.txt",
+) -> None:
+    # Create output directory if it doesn't exist
+    if output_dir != "." and not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+
     n = np.ones((Ny, Nx), dtype=np.complex128)
 
     room_formation(Nx, Ny, Ly, Lx, n)
@@ -589,6 +587,7 @@ def main(
         amplitude=amplitude,
         sigma=sigma,
         scale=scale,
+        output_dir=output_dir,
     )
 
     tk0 = (
@@ -597,7 +596,7 @@ def main(
         else range(len(tasks))
     )
 
-    with open("results.txt", "w") as f:
+    with open(results_file, "w") as f:
         f.write(
             "x_r, y_r, living_room_signal, bedroom_signal, "
             "kitchen_signal, bathroom_signal\n"
@@ -616,9 +615,85 @@ def main(
                     )
                     completed += 1
                     if completed % 10 == 0:
-                        print(f"Completed {completed}/{len(tasks)} simulations")
+                        print(
+                            f"Completed {completed}/{len(tasks)} simulations"
+                        )
+
+
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Simulate WiFi signal strength for different"
+        " router placements"
+    )
+    parser.add_argument(
+        "--wave-number",
+        type=float,
+        default=50.3,
+        help="Wave number k (default: 50.3 rad/m)",
+    )
+    parser.add_argument(
+        "--domain-x",
+        type=float,
+        default=10.0,
+        help="Domain size in x-direction (default: 10 meters)",
+    )
+    parser.add_argument(
+        "--domain-y",
+        type=float,
+        default=8.0,
+        help="Domain size in y-direction (default: 8 meters)",
+    )
+    parser.add_argument(
+        "--amplitude",
+        type=float,
+        default=1e4,
+        help="Source amplitude (default: 1e4)",
+    )
+    parser.add_argument(
+        "--sigma",
+        type=float,
+        default=0.2,
+        help="Source width (standard deviation) in meters (default: 0.2)",
+    )
+    parser.add_argument(
+        "--scale",
+        type=int,
+        default=100,
+        help="Scale factor for grid resolution (default:"
+        "100, higher is finer)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=".",
+        help="Directory where PNG files will be saved (default: current "
+        "working directory)",
+    )
+    parser.add_argument(
+        "--results-file",
+        type=str,
+        default="results.txt",
+        help="Path to the results.txt file (default: results.txt in current "
+        "working directory)",
+    )
+
+    args = parser.parse_args()
+
+    return args
 
 
 if __name__ == "__main__":
-    scale = int(sys.argv[1]) if len(sys.argv) > 1 else 100
-    main(50.3, 10 * scale, 8 * scale, 10, 8, 1e4, 0.2, scale)
+    args = parse_arguments()
+
+    main(
+        k=args.wave_number,
+        Nx=int(10 * args.scale),
+        Ny=int(8 * args.scale),
+        Lx=args.domain_x,
+        Ly=args.domain_y,
+        amplitude=args.amplitude,
+        sigma=args.sigma,
+        scale=args.scale,
+        output_dir=args.output_dir,
+        results_file=args.results_file,
+    )
