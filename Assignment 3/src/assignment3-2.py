@@ -1,7 +1,18 @@
-"""CLI entrypoint for Assignment 3 Helmholtz WiFi simulation.
+"""Assignment 3: Wi-Fi router placement optimization
 
-Keeps orchestration and argument parsing in a thin script while
-`helmholtz.py` remains reusable as an importable module.
+Group:         10
+Course:        Scientific Computing
+
+Description:
+-----------
+This module provides tools for simulating Wi-Fi signal strength in a 2D floor
+plan and optimizing router placement. It uses the finite difference
+method to solve the Helmholtz equation, implemented in the `helmholtz` module.
+
+To run a single simulatioin for a specific router location, use the command
+line arguments `--x` and `--y` to specify the router's position in meters.
+If these arguments are not provided, the module will run simulations for all
+valid router locations and save the results to a CSV file.
 """
 
 import argparse
