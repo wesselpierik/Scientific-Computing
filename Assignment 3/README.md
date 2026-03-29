@@ -3,7 +3,7 @@
 - src/: Source Python files:
   - src/assignment3-2.py: The CLI handler of running the Helmholtz module.
   - src/helmholtz.py: A module solving the Helmholtz equations for a
-  predefined 
+  predefined room.
 
 ### Data files:
 
