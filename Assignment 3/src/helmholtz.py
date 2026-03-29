@@ -1,4 +1,17 @@
-import argparse
+"""Wi-Fi signal simulation using the 2D Helmholtz equation.
+
+Group:        10
+Course:       Scientific Computing
+
+Description:
+-----------
+Logic for the simulation of the Wi-Fi signal strength in a
+room using the 2D Helmholtz equation. Only the main function will
+need to be called from a separate script. The other functions are
+not intended to be used directly.
+"""
+
+
 import os
 import matplotlib.pyplot as plt
 import numpy as np
@@ -38,6 +51,11 @@ MEASURE_LOCATIONS = {
 
 
 class gmres_counter(object):
+    """
+    A class for pretty-printing the steps of GMRES. This is used in
+    the solve_GMRES function to track progress and convergence.
+    """
+
     def __init__(self, disp=True):
         self._disp = disp
         self.niter = 0
@@ -52,6 +70,20 @@ class gmres_counter(object):
 def f(
     x: float, y: float, x_r: float, y_r: float, amplitude: float, sigma: float
 ) -> float:
+    """Evaluate the Gaussian source profile at a grid point.
+
+    Args:
+        x: x-coordinate of the evaluation point.
+        y: y-coordinate of the evaluation point.
+        x_r: Router x-position.
+        y_r: Router y-position.
+        amplitude: Source amplitude.
+        sigma: Source width (standard deviation).
+
+    Returns:
+        Source value at ``(x, y)``.
+
+    """
     return amplitude * np.exp(
         -((x - x_r) ** 2 + (y - y_r) ** 2) / (2 * sigma**2)
     )
@@ -59,6 +91,17 @@ def f(
 
 @numba.njit(cache=True)
 def idx(i: int, j: int, Nx: int) -> int:
+    """Map 2D grid indices to a flattened 1D index.
+
+    Args:
+        i: Row index.
+        j: Column index.
+        Nx: Number of grid points in x-direction.
+
+    Returns:
+        Flattened 1D index.
+
+    """
     return i * Nx + j
 
 
@@ -72,6 +115,21 @@ def matrix_construction(
     hy: float,
     k: float,
 ) -> None:
+    """Assemble one matrix row block for the Helmholtz system.
+
+    Builds interior rows with a 9-point stencil and boundary rows with
+    one-sided Robin/Sommerfeld conditions.
+
+    Args:
+        A: Sparse matrix being assembled in LIL format.
+        n: Complex refractive-index field.
+        i: Row index currently being assembled.
+        Nx: Number of grid points in x-direction.
+        Ny: Number of grid points in y-direction.
+        hx: Grid spacing in x-direction.
+        hy: Grid spacing in y-direction.
+        k: Wave number.
+    """
     for j in range(Nx):
         p = idx(i, j, Nx)
 
@@ -153,8 +211,8 @@ def build_source_vector(
         sigma: Source width.
 
     Returns:
-        np.ndarray: Complex RHS vector with source values on interior nodes
-            and zero boundary values.
+        Complex RHS vector with source values on interior nodes and
+            zero boundary values.
     """
     b = np.zeros(Nx * Ny, dtype=np.complex128)
     for i in range(1, Ny - 1):
@@ -180,7 +238,7 @@ def measure_signal_strength(
         hy: Grid spacing in y-direction.
 
     Returns:
-        float: Average signal strength in dB within 5cm radius.
+        Average signal strength in dB within 5cm radius.
     """
     strength = 10 * np.log10(
         np.abs(u_2d) ** 2 / np.max(np.abs(u_2d) ** 2) + 1e-20
@@ -223,6 +281,19 @@ def create_wall(
     hy: float,
     hx: float,
 ) -> None:
+    """Fill a rectangular wall region in the refractive-index map.
+
+    Args:
+        x_start: Left x-boundary of the wall.
+        x_end: Right x-boundary of the wall.
+        y_start: Lower y-boundary of the wall.
+        y_end: Upper y-boundary of the wall.
+        n: Complex refractive-index array to modify.
+        Ny: Number of grid points in y-direction.
+        Nx: Number of grid points in x-direction.
+        hy: Grid spacing in y-direction.
+        hx: Grid spacing in x-direction.
+    """
     val = 2.5 + 0.5j
 
     # Convert to index space once
@@ -242,6 +313,15 @@ def create_wall(
 def room_formation(
     Nx: int, Ny: int, Ly: float, Lx: float, n: np.ndarray
 ) -> None:
+    """Construct the room layout inside the refractive-index field.
+
+    Args:
+        Nx: Number of grid points in x-direction.
+        Ny: Number of grid points in y-direction.
+        Ly: Physical domain length in y-direction.
+        Lx: Physical domain length in x-direction.
+        n: Complex refractive-index array to fill.
+    """
     hx = Lx / (Nx - 1)
     hy = Ly / (Ny - 1)
 
@@ -271,6 +351,19 @@ def room_formation(
 def build_preconditioner(
     A_csc: sp.sparse.csc_array, A_csr: sp.sparse.csr_array
 ) -> LinearOperator:
+    """Build a robust preconditioner for GMRES.
+
+    Tries several ILU configurations and falls back to Jacobi scaling if all
+    ILU attempts fail.
+
+    Args:
+        A_csc: Equilibrated system matrix in CSC format.
+        A_csr: Equilibrated system matrix in CSR format.
+
+    Returns:
+        Preconditioner operator for GMRES.
+
+    """
     A_work = A_csc.copy()
     A_work.sum_duplicates()
     A_work.eliminate_zeros()
@@ -337,9 +430,7 @@ def equilibrate_system(
         eps: Small positive guard to avoid division by zero.
 
     Returns:
-        tuple[sp.sparse.csr_array, np.ndarray, np.ndarray]:
-            Equilibrated matrix, inverse row scaling, and column scaling
-            factors.
+        Equilibrated matrix, inverse row scaling, and column scaling factors.
     """
     abs_A = np.abs(A_csr)
 
@@ -381,7 +472,7 @@ def solve_GMRES(
         restart: Restart parameter passed to GMRES.
 
     Returns:
-        tuple[np.ndarray, int]: Solution vector and GMRES info code.
+        Solution vector and GMRES info code.
     """
     solution, info = gmres(
         A_csr,
@@ -400,6 +491,17 @@ def solve_GMRES(
 def check_router_position(
     x_r: float, y_r: float, measure_locations: dict
 ) -> bool:
+    """Validate whether a router position is allowed.
+
+    Args:
+        x_r: Candidate router x-position.
+        y_r: Candidate router y-position.
+        measure_locations: Dictionary of measurement points to avoid.
+
+    Returns:
+        ``True`` when the position is valid, ``False`` otherwise.
+
+    """
     if (
         (0.15 <= x_r <= 2.425 and 0.15 <= y_r <= 2.0)
         or (6.925 <= x_r <= 7.075 and 0.15 <= y_r <= 1.5)
@@ -426,6 +528,21 @@ def simulate_wifi_signal(
     scale: int,
     output_dir: str = ".",
 ) -> tuple[float, float, float, float, float, float] | None:
+    """Simulate one router placement and compute room signal metrics.
+
+    Args:
+        x_r: Router x-position.
+        y_r: Router y-position.
+        amplitude: Source amplitude.
+        sigma: Source width.
+        scale: Grid scale factor used for naming outputs.
+        output_dir: Directory where PNG output is saved.
+
+    Returns:
+        Router coordinates and room signal strengths, or ``None`` if the
+        position is invalid.
+
+    """
     if not check_router_position(x_r, y_r, MEASURE_LOCATIONS):
         return None
     b = build_source_vector(
@@ -538,7 +655,28 @@ def main(
     scale: int,
     output_dir: str = ".",
     results_file: str = "results.txt",
+    router_x: float | None = None,
+    router_y: float | None = None,
 ) -> None:
+    """Run full simulation workflow for all candidate router locations.
+
+    Args:
+        k: Wave number.
+        Nx: Number of grid points in x-direction.
+        Ny: Number of grid points in y-direction.
+        Lx: Physical domain length in x-direction.
+        Ly: Physical domain length in y-direction.
+        amplitude: Source amplitude.
+        sigma: Source width.
+        scale: Grid scale factor.
+        output_dir: Directory where PNG outputs are written.
+        results_file: Path where CSV-style results are written.
+        router_x: Optional fixed router x-position for a single run.
+        router_y: Optional fixed router y-position for a single run.
+
+    Raises:
+        ValueError: If only one of router_x or router_y is provided.
+    """
     # Create output directory if it doesn't exist
     if output_dir != "." and not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
@@ -580,14 +718,16 @@ def main(
     SHARED_HX = hx
     SHARED_HY = hy
 
-    # Generate all (x_r, y_r) coordinate pairs
-    # x_positions = np.linspace(0.3, 9.7, 95)
-    # y_positions = np.linspace(0.3, 7.7, 75)
+    if (router_x is None) != (router_y is None):
+        raise ValueError("Provide both router_x and router_y, or neither.")
 
-    x_positions = [3.0, 6.9, 2.9, 2.8, 6.9]
-    y_positions = [2.9, 2.9, 2.9, 2.9, 2.8]
-
-    tasks = [(x_r, y_r) for x_r in x_positions for y_r in y_positions]
+    if router_x is not None and router_y is not None:
+        tasks = [(router_x, router_y)]
+    else:
+        # Generate all (x_r, y_r) coordinate pairs
+        x_positions = np.linspace(0.3, 9.7, 95)
+        y_positions = np.linspace(0.3, 7.7, 75)
+        tasks = [(x_r, y_r) for x_r in x_positions for y_r in y_positions]
 
     num_workers = min(len(tasks), cpu_count())
     print(f"Using {num_workers} worker processes for {len(tasks)} tasks")
@@ -628,82 +768,3 @@ def main(
                         print(
                             f"Completed {completed}/{len(tasks)} simulations"
                         )
-
-
-def parse_arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Simulate WiFi signal strength for different"
-        " router placements"
-    )
-    parser.add_argument(
-        "--wave-number",
-        type=float,
-        default=50.3,
-        help="Wave number k (default: 50.3 rad/m)",
-    )
-    parser.add_argument(
-        "--domain-x",
-        type=float,
-        default=10.0,
-        help="Domain size in x-direction (default: 10 meters)",
-    )
-    parser.add_argument(
-        "--domain-y",
-        type=float,
-        default=8.0,
-        help="Domain size in y-direction (default: 8 meters)",
-    )
-    parser.add_argument(
-        "--amplitude",
-        type=float,
-        default=1e4,
-        help="Source amplitude (default: 1e4)",
-    )
-    parser.add_argument(
-        "--sigma",
-        type=float,
-        default=0.2,
-        help="Source width (standard deviation) in meters (default: 0.2)",
-    )
-    parser.add_argument(
-        "--scale",
-        type=int,
-        default=100,
-        help="Scale factor for grid resolution (default:"
-        "100, higher is finer)",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default=".",
-        help="Directory where PNG files will be saved (default: current "
-        "working directory)",
-    )
-    parser.add_argument(
-        "--results-file",
-        type=str,
-        default="results.txt",
-        help="Path to the results.txt file (default: results.txt in current "
-        "working directory)",
-    )
-
-    args = parser.parse_args()
-
-    return args
-
-
-if __name__ == "__main__":
-    args = parse_arguments()
-
-    main(
-        k=args.wave_number,
-        Nx=int(10 * args.scale),
-        Ny=int(8 * args.scale),
-        Lx=args.domain_x,
-        Ly=args.domain_y,
-        amplitude=args.amplitude,
-        sigma=args.sigma,
-        scale=args.scale,
-        output_dir=args.output_dir,
-        results_file=args.results_file,
-    )
