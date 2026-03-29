@@ -27,7 +27,9 @@ venv/bin/pip3 install -r requirements.txt
 ```
 
 ### Assignment 1:
+Finite element method:
 
+To run the simulation for Re=500, run the Jupyter notebook finite_element.ipynb. Run the cells individually to run the simulation for the other Reynolds numbers.
 
 ### Assignment 2:
 To run the simulations for all 7125 router positions:
