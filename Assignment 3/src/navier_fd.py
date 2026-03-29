@@ -43,7 +43,7 @@ dim_y = 0.41
 
 # Discretization parameters
 ds = 0.004
-dt = 0.0003
+dt = 0.0001
 nx = int(dim_x / ds) + 1
 ny = int(dim_y / ds) + 1
 
