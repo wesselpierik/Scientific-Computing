@@ -383,7 +383,7 @@ def animate_flow(num_frames: int = 100, interval: int = 1) -> None:  # pyright: 
 
     """
     directions = 9
-    f = feq(np.ones((nx, ny, directions)))
+    f = feq(np.ones((nx, ny, directions)) / directions)
 
     x = np.arange(nx) * ds
     y = np.arange(ny) * ds
