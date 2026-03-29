@@ -52,9 +52,7 @@ class gmres_counter(object):
 def f(
     x: float, y: float, x_r: float, y_r: float, amplitude: float, sigma: float
 ) -> float:
-    return amplitude * np.exp(
-        -(((x - x_r)) ** 2 + ((y - y_r)) ** 2) / (2 * sigma**2)
-    )
+    return amplitude * np.exp(-(((x - x_r)) ** 2 + ((y - y_r)) ** 2) / (2 * sigma**2))
 
 
 @numba.njit(cache=True)
@@ -182,9 +180,7 @@ def measure_signal_strength(
     Returns:
         float: Average signal strength in dB within 5cm radius.
     """
-    strength = 10 * np.log10(
-        np.abs(u_2d) ** 2 / np.max(np.abs(u_2d) ** 2) + 1e-20
-    )
+    strength = 10 * np.log10(np.abs(u_2d) ** 2 / np.max(np.abs(u_2d) ** 2) + 1e-20)
 
     summed_strength = 0.0
     num_points = 0
@@ -223,34 +219,39 @@ def create_wall(
     hy: float,
     hx: float,
 ) -> None:
-    for i in range(Ny):
-        y = i * hy
-        if y_start <= y <= y_end:
-            for j in range(Nx):
-                x = j * hx
-                if x_start <= x <= x_end:
-                    n[i, j] = 2.5 + 0.5j
+    val = 2.5 + 0.5j
+
+    # Convert to index space once
+    i_start = max(0, int(y_start / hy))
+    i_end = min(Ny - 1, int(y_end / hy))
+
+    j_start = max(0, int(x_start / hx))
+    j_end = min(Nx - 1, int(x_end / hx))
+
+    # Loop only over the relevant region
+    for i in range(i_start, i_end + 1):
+        for j in range(j_start, j_end + 1):
+            n[i, j] = val
 
 
 @numba.njit(cache=True)
-def room_formation(
-    Nx: int, Ny: int, Ly: float, Lx: float, n: np.ndarray
-) -> None:
+def room_formation(Nx: int, Ny: int, Ly: float, Lx: float, n: np.ndarray) -> None:
     hx = Lx / (Nx - 1)
     hy = Ly / (Ny - 1)
 
+    val = 2.5 + 0.5j
+
     for i in range(Ny):
         y = i * hy
+        y_edge = (y < 0.15) or (y > 7.85)
+
         for j in range(Nx):
-            x = j * hx
-            if y < 0.15:
-                n[i, j] = 2.5 + 0.5j
-            if y > 7.85:
-                n[i, j] = 2.5 + 0.5j
-            if x < 0.15:
-                n[i, j] = 2.5 + 0.5j
-            if x > 9.85:
-                n[i, j] = 2.5 + 0.5j
+            if y_edge:
+                n[i, j] = val
+            else:
+                x = j * hx
+                if (x < 0.15) or (x > 9.85):
+                    n[i, j] = val
 
     create_wall(2.425, 2.575, 0.15, 2.0, n, Ny, Nx, hy, hx)
     create_wall(6.925, 7.075, 0.15, 1.5, n, Ny, Nx, hy, hx)
@@ -271,9 +272,7 @@ def build_preconditioner(
 
     # Shift the matrix by a small imaginary value to improve
     # ILU stability if needed.
-    identity = (
-        sp.sparse.eye(A_work.shape[0], format="csc", dtype=A_work.dtype) * 1j
-    )
+    identity = sp.sparse.eye(A_work.shape[0], format="csc", dtype=A_work.dtype) * 1j
     attempts = [
         ("ILU preconditioner", A_work, 5e-4, 20),
         (
@@ -306,18 +305,14 @@ def build_preconditioner(
                 diag_pivot_thresh=0.01,
             )
             print(f"Using {label}")
-            return LinearOperator(
-                A_work.shape, matvec=ilu.solve, dtype=A_work.dtype
-            )
+            return LinearOperator(A_work.shape, matvec=ilu.solve, dtype=A_work.dtype)
         except RuntimeError as error:
             print(f"{label} failed: {error}")
 
     diag = A_csr.diagonal().copy()
     diag[np.abs(diag) < 1e-12] = 1.0
     print("ILU failed for all attempts; using Jacobi preconditioner")
-    return LinearOperator(
-        A_csr.shape, matvec=lambda x: x / diag, dtype=A_csr.dtype
-    )
+    return LinearOperator(A_csr.shape, matvec=lambda x: x / diag, dtype=A_csr.dtype)
 
 
 def equilibrate_system(
@@ -390,9 +385,7 @@ def solve_GMRES(
     return solution, info
 
 
-def check_router_position(
-    x_r: float, y_r: float, measure_locations: dict
-) -> bool:
+def check_router_position(x_r: float, y_r: float, measure_locations: dict) -> bool:
     if (
         (0.15 <= x_r <= 2.425 and 0.15 <= y_r <= 2.0)
         or (6.925 <= x_r <= 7.075 and 0.15 <= y_r <= 1.5)
@@ -615,15 +608,12 @@ def main(
                     )
                     completed += 1
                     if completed % 10 == 0:
-                        print(
-                            f"Completed {completed}/{len(tasks)} simulations"
-                        )
+                        print(f"Completed {completed}/{len(tasks)} simulations")
 
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Simulate WiFi signal strength for different"
-        " router placements"
+        description="Simulate WiFi signal strength for different" " router placements"
     )
     parser.add_argument(
         "--wave-number",
@@ -659,8 +649,7 @@ def parse_arguments() -> argparse.Namespace:
         "--scale",
         type=int,
         default=100,
-        help="Scale factor for grid resolution (default:"
-        "100, higher is finer)",
+        help="Scale factor for grid resolution (default:" "100, higher is finer)",
     )
     parser.add_argument(
         "--output-dir",
