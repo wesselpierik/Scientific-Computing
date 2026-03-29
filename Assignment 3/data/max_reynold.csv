@@ -1,4 +1,5 @@
 type,value
-fd_simple,125
-fd_wendroff,1400
-lbm,500
+Simple-FD,125
+Wendroff-FD,1400
+FEM,500
+LBM,500

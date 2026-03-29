@@ -43,14 +43,14 @@ dim_y = 0.41
 
 # Discretization parameters
 ds = 0.005
-dt = 0.0001
+dt = 0.000015
 nx = int(dim_x / ds) + 1
 ny = int(dim_y / ds) + 1
 
 # Parameters
 rho = 1
 nu = 0.005
-re = 150
+re = 1400
 start_velocity = re * nu / (2 * rohr_rad)
 
 
