@@ -52,7 +52,9 @@ class gmres_counter(object):
 def f(
     x: float, y: float, x_r: float, y_r: float, amplitude: float, sigma: float
 ) -> float:
-    return amplitude * np.exp(-(((x - x_r)) ** 2 + ((y - y_r)) ** 2) / (2 * sigma**2))
+    return amplitude * np.exp(
+        -((x - x_r) ** 2 + (y - y_r) ** 2) / (2 * sigma**2)
+    )
 
 
 @numba.njit(cache=True)
@@ -180,7 +182,9 @@ def measure_signal_strength(
     Returns:
         float: Average signal strength in dB within 5cm radius.
     """
-    strength = 10 * np.log10(np.abs(u_2d) ** 2 / np.max(np.abs(u_2d) ** 2) + 1e-20)
+    strength = 10 * np.log10(
+        np.abs(u_2d) ** 2 / np.max(np.abs(u_2d) ** 2) + 1e-20
+    )
 
     summed_strength = 0.0
     num_points = 0
@@ -235,7 +239,9 @@ def create_wall(
 
 
 @numba.njit(cache=True)
-def room_formation(Nx: int, Ny: int, Ly: float, Lx: float, n: np.ndarray) -> None:
+def room_formation(
+    Nx: int, Ny: int, Ly: float, Lx: float, n: np.ndarray
+) -> None:
     hx = Lx / (Nx - 1)
     hy = Ly / (Ny - 1)
 
@@ -272,7 +278,9 @@ def build_preconditioner(
 
     # Shift the matrix by a small imaginary value to improve
     # ILU stability if needed.
-    identity = sp.sparse.eye(A_work.shape[0], format="csc", dtype=A_work.dtype) * 1j
+    identity = (
+        sp.sparse.eye(A_work.shape[0], format="csc", dtype=A_work.dtype) * 1j
+    )
     attempts = [
         ("ILU preconditioner", A_work, 5e-4, 20),
         (
@@ -305,14 +313,18 @@ def build_preconditioner(
                 diag_pivot_thresh=0.01,
             )
             print(f"Using {label}")
-            return LinearOperator(A_work.shape, matvec=ilu.solve, dtype=A_work.dtype)
+            return LinearOperator(
+                A_work.shape, matvec=ilu.solve, dtype=A_work.dtype
+            )
         except RuntimeError as error:
             print(f"{label} failed: {error}")
 
     diag = A_csr.diagonal().copy()
     diag[np.abs(diag) < 1e-12] = 1.0
     print("ILU failed for all attempts; using Jacobi preconditioner")
-    return LinearOperator(A_csr.shape, matvec=lambda x: x / diag, dtype=A_csr.dtype)
+    return LinearOperator(
+        A_csr.shape, matvec=lambda x: x / diag, dtype=A_csr.dtype
+    )
 
 
 def equilibrate_system(
@@ -385,7 +397,9 @@ def solve_GMRES(
     return solution, info
 
 
-def check_router_position(x_r: float, y_r: float, measure_locations: dict) -> bool:
+def check_router_position(
+    x_r: float, y_r: float, measure_locations: dict
+) -> bool:
     if (
         (0.15 <= x_r <= 2.425 and 0.15 <= y_r <= 2.0)
         or (6.925 <= x_r <= 7.075 and 0.15 <= y_r <= 1.5)
@@ -567,8 +581,11 @@ def main(
     SHARED_HY = hy
 
     # Generate all (x_r, y_r) coordinate pairs
-    x_positions = np.linspace(0.3, 9.7, 95)
-    y_positions = np.linspace(0.3, 7.7, 75)
+    # x_positions = np.linspace(0.3, 9.7, 95)
+    # y_positions = np.linspace(0.3, 7.7, 75)
+
+    x_positions = [3.0, 6.9, 2.9, 2.8, 6.9]
+    y_positions = [2.9, 2.9, 2.9, 2.9, 2.8]
 
     tasks = [(x_r, y_r) for x_r in x_positions for y_r in y_positions]
 
@@ -608,12 +625,15 @@ def main(
                     )
                     completed += 1
                     if completed % 10 == 0:
-                        print(f"Completed {completed}/{len(tasks)} simulations")
+                        print(
+                            f"Completed {completed}/{len(tasks)} simulations"
+                        )
 
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Simulate WiFi signal strength for different" " router placements"
+        description="Simulate WiFi signal strength for different"
+        " router placements"
     )
     parser.add_argument(
         "--wave-number",
@@ -649,7 +669,8 @@ def parse_arguments() -> argparse.Namespace:
         "--scale",
         type=int,
         default=100,
-        help="Scale factor for grid resolution (default:" "100, higher is finer)",
+        help="Scale factor for grid resolution (default:"
+        "100, higher is finer)",
     )
     parser.add_argument(
         "--output-dir",
