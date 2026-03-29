@@ -1,7 +1,8 @@
+import argparse
 import pandas as pd
 
 
-def find_best_router_locations(results_file, top_n=10):
+def find_best_router_locations(results_file: str, top_n: int = 10) -> pd.DataFrame:
     """
     Parse router placement results and find the top N best locations.
 
@@ -52,21 +53,19 @@ def find_best_router_locations(results_file, top_n=10):
     return top_locations
 
 
-def print_results(top_locations):
+def print_results(top_locations: pd.DataFrame) -> None:
     """
     Print the top router locations in a formatted table.
 
     Args:
         top_locations: DataFrame containing top router locations
     """
-    print("\n" + "=" * 120)
+    print("\n" + "=" * 80)
     print("TOP 10 BEST ROUTER PLACEMENT LOCATIONS")
-    print("=" * 120)
+    print("=" * 80)
     print("\nMetrics:")
     print("  - avg_signal: Average signal strength across all rooms (higher is better)")
-    print(
-        "  - min_signal: Minimum signal strength (lower is better, should be > -70 dB)"
-    )
+    print("  - min_signal: Minimum signal strength (lower is better)")
     print(
         "  - signal_std: Standard deviation of signal (lower is better for balanced coverage)"
     )
@@ -84,25 +83,51 @@ def print_results(top_locations):
         print()
 
 
-def main():
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Find the best router placement locations based on signal strength analysis"
+    )
+    parser.add_argument(
+        "results_file",
+        help="Path to the results.txt file containing router placement data",
+    )
+    parser.add_argument(
+        "-n",
+        "--top-n",
+        type=int,
+        default=10,
+        help="Number of top locations to return (default: 10)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default="top_10_routers.csv",
+        help="Output CSV file to save the top locations (default: top_10_routers.csv)",
+    )
+
+    args = parser.parse_args()
+
+    return args
+
+
+def main() -> None:
     """
     Main function to find and display the top 10 best router locations.
     """
-    results_file = (
-        "/home/wessel/Documents/Scientific Computing/Assignment 3/src/results.txt"
-    )
+    args = parse_arguments()
 
     try:
-        top_locations = find_best_router_locations(results_file, top_n=10)
+        top_locations = find_best_router_locations(args.results_file, top_n=args.top_n)
         print_results(top_locations)
 
         # Also save results to a CSV file
-        output_file = "/home/wessel/Documents/Scientific Computing/Assignment 3/src/top_10_routers.csv"
+        output_file = args.output
         top_locations.to_csv(output_file, index=False)
         print(f"\nResults saved to: {output_file}")
 
     except FileNotFoundError:
-        print(f"Error: Could not find file {results_file}")
+        print(f"Error: Could not find file {args.results_file}")
     except Exception as e:
         print(f"Error: {e}")
 
